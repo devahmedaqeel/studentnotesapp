@@ -126,6 +126,7 @@ export const StudentSearchScreen: React.FC<Props> = ({ navigation }) => {
               student={item}
               onPress={() => navigation.navigate('StudentProfile', { userId: item.id })}
               onFollowAction={() => handleFollow(item)}
+              onChatAction={() => navigation.navigate('Chat', { peerId: item.id })}
             />
           )}
         />

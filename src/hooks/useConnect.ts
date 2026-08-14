@@ -44,13 +44,7 @@ export const useConnect = () => {
       setMyProfile(prof);
       setNeedsUsernameSetup(!prof.username || prof.username.startsWith('student_'));
 
-      // 3. Auto-seed demo data if fresh empty environment
-      const currentConns = await connectService.getFollowing(userId);
-      if (currentConns.length === 0) {
-        await connectSeedService.seedDemoData(userId);
-      }
-
-      // 4. Followers, Following, Requests
+      // 3. Followers, Following, Requests
       const fList = await connectService.getFollowers(userId);
       const fgList = await connectService.getFollowing(userId);
       const reqs = await connectService.getPendingRequests(userId);

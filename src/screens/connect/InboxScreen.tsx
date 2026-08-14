@@ -48,7 +48,6 @@ export const InboxScreen: React.FC<Props> = ({ navigation }) => {
     following,
     pendingRequests,
     refreshConnect,
-    seedDemo,
     acceptRequest,
     declineRequest,
   } = useConnect();
@@ -90,14 +89,6 @@ export const InboxScreen: React.FC<Props> = ({ navigation }) => {
     } catch {
       navigation.navigate('CreateStatus');
     }
-  };
-
-  const handleSeedDemo = async () => {
-    setRefreshing(true);
-    await seedDemo();
-    await Promise.all([loadConversations(), refreshStatuses()]);
-    setRefreshing(false);
-    Alert.alert('Demo Seeded', 'Demo classmates (Sara, Hamza, Ayesha, Zain) and test chats are ready!');
   };
 
   const totalUnread = conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
@@ -170,10 +161,6 @@ export const InboxScreen: React.FC<Props> = ({ navigation }) => {
           <View style={styles.headerRightGroup}>
             <TouchableOpacity style={styles.headerIconBtn} onPress={handleLaunchCameraForStatus}>
               <Ionicons name="camera-outline" size={22} color="#FFFFFF" />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.headerIconBtn} onPress={handleSeedDemo}>
-              <Ionicons name="sparkles" size={19} color="#FBBF24" />
             </TouchableOpacity>
 
             <TouchableOpacity
