@@ -6,12 +6,15 @@ import { syncService } from '../services/syncService';
 import { StudentProfile, StudentStatusType } from '../types/profile';
 import { connectService } from '../services/connectService';
 import { presenceService } from '../services/presenceService';
+import { Platform } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import * as Linking from 'expo-linking';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 
-WebBrowser.maybeCompleteAuthSession();
+if (Platform.OS === 'web') {
+  WebBrowser.maybeCompleteAuthSession();
+}
 
 export type UserProfile = StudentProfile;
 
@@ -492,6 +495,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       console.log('🌐 Opening Web Browser OAuth Session...');
 
+      const safeDismissBrowser = () => {
+        try {
+          if (Platform.OS === 'ios') {
+            WebBrowser.dismissAuthSession();
+          }
+        } catch {}
+      };
+
       // Start active session polling while user is in browser
       let sessionDetected = false;
       const pollInterval = setInterval(async () => {
@@ -500,7 +511,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (pollData.session && pollData.session.user) {
             sessionDetected = true;
             clearInterval(pollInterval);
-            WebBrowser.dismissAuthSession();
+            safeDismissBrowser();
             setSession(pollData.session);
             setUser(pollData.session.user);
             setIsOffline(false);
@@ -519,7 +530,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const result: any = await Promise.race([authPromise, timeoutPromise]);
       clearInterval(pollInterval);
-      WebBrowser.dismissAuthSession();
+      safeDismissBrowser();
 
       if (sessionDetected) {
         return { success: true };

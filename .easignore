@@ -3,28 +3,24 @@ node_modules/
 .pnp
 .pnp.js
 
-# Testing
+# Testing & Coverage
 coverage/
+__tests__/
 
 # Expo
 .expo/
 dist/
 web-build/
 
-# Native builds & caches
+# Native build artifacts and caches
 android/build/
 android/.gradle/
-android/.kotlin/
 android/app/build/
 android/app/.cxx/
+android/.idea/
+android/local.properties
 ios/build/
 ios/Pods/
-*.orig.*
-*.jks
-*.p8
-*.p12
-*.key
-*.mobileprovision
 
 # Environment secret files
 .env
@@ -32,7 +28,6 @@ ios/Pods/
 .env.development.local
 .env.test.local
 .env.production.local
-*.env
 
 # Operating System files
 .DS_Store

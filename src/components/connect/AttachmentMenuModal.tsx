@@ -6,8 +6,10 @@ import {
   TouchableOpacity,
   StyleSheet,
   TouchableWithoutFeedback,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../hooks/useTheme';
 
 interface AttachmentMenuModalProps {
@@ -34,6 +36,7 @@ export const AttachmentMenuModal: React.FC<AttachmentMenuModalProps> = ({
   onSelectNoteVault,
 }) => {
   const { theme, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const options = [
     {
@@ -126,6 +129,7 @@ export const AttachmentMenuModal: React.FC<AttachmentMenuModalProps> = ({
                 {
                   backgroundColor: isDark ? '#1F2C34' : '#FFFFFF',
                   borderColor: isDark ? '#2A3942' : '#E2E8F0',
+                  paddingBottom: Math.max(insets.bottom, Platform.OS === 'android' ? 20 : 0) + 16,
                 },
               ]}
             >
@@ -184,7 +188,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 28,
     paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: 32,
     borderWidth: 1,
     borderBottomWidth: 0,
     elevation: 20,

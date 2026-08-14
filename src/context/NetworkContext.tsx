@@ -41,13 +41,14 @@ export const NetworkProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, []);
 
-  const handleNetStateChange = useCallback(async (state: NetInfoState) => {
-    const connected = state.isConnected ?? false;
-    const reachable = state.isInternetReachable ?? connected;
-    const isNowOnline = Boolean(connected && reachable !== false);
+  const handleNetStateChange = useCallback((state: NetInfoState) => {
+    // If state.isConnected is not explicitly false, treat the device as online.
+    // On Android, isInternetReachable is frequently delayed, null, or false on cellular networks.
+    const connected = state.isConnected !== false;
+    const isNowOnline = connected;
 
-    setIsConnected(state.isConnected);
-    setIsInternetReachable(state.isInternetReachable);
+    setIsConnected(state.isConnected ?? true);
+    setIsInternetReachable(state.isInternetReachable ?? true);
     setNetworkType(state.type || 'unknown');
     setNetworkStatus(isNowOnline ? 'online' : 'offline');
   }, []);
@@ -66,11 +67,21 @@ export const NetworkProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const checkConnection = async (): Promise<boolean> => {
     const state = await NetInfo.fetch();
-    const connected = state.isConnected ?? false;
-    const reachable = state.isInternetReachable ?? connected;
-    const online = Boolean(connected && reachable !== false);
-    setNetworkStatus(online ? 'online' : 'offline');
-    return online;
+    const connected = state.isConnected !== false;
+    
+    if (!connected) {
+      setNetworkStatus('offline');
+      return false;
+    }
+
+    // On Android, NetInfo can report connected=true even when there's no actual internet.
+    // Do a real reachability check to verify.
+    const reachable = await verifyReachable();
+    setNetworkStatus(reachable ? 'online' : 'offline');
+    
+    // If NetInfo says connected, trust it even if our ping failed
+    // (the ping endpoint might be temporarily down but internet works)
+    return connected;
   };
 
   const reconnectRealtime = async () => {

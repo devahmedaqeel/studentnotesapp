@@ -78,13 +78,6 @@ export const RegisterScreen: React.FC<Props> = ({ navigation }) => {
       return;
     }
 
-    if (!isOnline) {
-      setUsernameStatus('offline');
-      setUsernameMessage('Internet connection required to check availability.');
-      setIsCheckingUsername(false);
-      return;
-    }
-
     setIsCheckingUsername(true);
     setUsernameStatus('checking');
     setUsernameMessage('Checking availability...');
@@ -96,15 +89,21 @@ export const RegisterScreen: React.FC<Props> = ({ navigation }) => {
           setUsernameStatus('available');
           setUsernameMessage(`@${clean} is available!`);
         } else if (res.isNetworkError) {
-          setUsernameStatus('offline');
-          setUsernameMessage('Internet connection required to check availability.');
+          const isNet = await checkConnection();
+          if (!isNet) {
+            setUsernameStatus('offline');
+            setUsernameMessage('Internet connection required to check availability.');
+          } else {
+            setUsernameStatus('available');
+            setUsernameMessage(`@${clean} is available!`);
+          }
         } else {
           setUsernameStatus('taken');
-          setUsernameMessage(`@${clean} is already taken. Please choose another.`);
+          setUsernameMessage(res.error || `@${clean} is already taken. Please choose another.`);
         }
       } catch {
-        setUsernameStatus('offline');
-        setUsernameMessage('Internet connection required to check availability.');
+        setUsernameStatus('available');
+        setUsernameMessage(`@${clean} is available!`);
       } finally {
         setIsCheckingUsername(false);
       }
@@ -113,7 +112,7 @@ export const RegisterScreen: React.FC<Props> = ({ navigation }) => {
     return () => {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     };
-  }, [username, isOnline]);
+  }, [username]);
 
   const handleRegister = async () => {
     // 1. Connectivity Check

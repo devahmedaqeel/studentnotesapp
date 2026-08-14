@@ -95,10 +95,10 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
             >
               <View style={styles.settingAvatarInner}>
                 {profile?.avatarUrl ? (
-                  <Image source={{ uri: profile.avatarUrl }} style={styles.avatarImg} />
+                  <Image source={{ uri: profile.avatarUrl }} style={styles.avatarImg} resizeMode="cover" />
                 ) : (
-                  <View style={[styles.iconBox, { backgroundColor: presetData.bg }]}>
-                    <Text style={{ fontSize: 20 }}>{presetData.emoji}</Text>
+                  <View style={[styles.avatarEmojiBox, { backgroundColor: presetData.bg }]}>
+                    <Text style={styles.avatarEmoji}>{presetData.emoji}</Text>
                   </View>
                 )}
               </View>
@@ -461,11 +461,10 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   settingAvatarRing: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     borderWidth: 2.5,
-    padding: 2,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -475,17 +474,28 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   settingAvatarInner: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarImg: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+  },
+  avatarEmojiBox: {
     width: '100%',
     height: '100%',
-    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarEmoji: {
+    fontSize: 20,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   cardTextWrapper: {
     flex: 1,

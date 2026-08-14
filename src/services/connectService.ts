@@ -145,22 +145,50 @@ export const connectService = {
           .maybeSingle();
 
         if (cloudErr) {
-          return {
-            available: false,
-            isNetworkError: true,
-            error: 'Internet connection required to verify username availability.',
-          };
+          // If table doesn't exist yet (PGRST205), skip cloud check — local SQLite already passed
+          if (cloudErr.code === 'PGRST205' || cloudErr.message?.includes('schema cache')) {
+            console.warn('student_profiles table not found in Supabase, skipping cloud check');
+          } else if (cloudErr.code === '42P01') {
+            console.warn('student_profiles table does not exist yet in Supabase');
+          } else {
+            // Check if this is actually a network/connectivity error vs a server-side error
+            const errMsg = cloudErr.message || '';
+            const isActualNetworkError = 
+              errMsg.includes('fetch') || 
+              errMsg.includes('network') || 
+              errMsg.includes('timeout') ||
+              errMsg.includes('Failed to fetch') ||
+              errMsg.includes('Network request failed') ||
+              errMsg.includes('ECONNREFUSED') ||
+              errMsg.includes('ETIMEDOUT');
+            
+            if (isActualNetworkError) {
+              return {
+                available: false,
+                isNetworkError: true,
+                error: 'Internet connection required to verify username availability.',
+              };
+            }
+            // For other server errors (permission, RLS, etc.), fall through — local check passed
+            console.warn('Username cloud check server error (non-network):', cloudErr.message);
+          }
         }
 
         if (cloudProfile && cloudProfile.id !== currentUserId) {
           return { available: false, error: 'This username is already taken. Please choose another.' };
         }
       } catch (networkErr: any) {
-        return {
-          available: false,
-          isNetworkError: true,
-          error: 'Internet connection required to verify username availability.',
-        };
+        // Only treat as network error if it's actually a fetch/connection failure
+        const msg = networkErr?.message || '';
+        if (msg.includes('fetch') || msg.includes('network') || msg.includes('timeout') || msg.includes('Failed to fetch') || msg.includes('Network request failed')) {
+          return {
+            available: false,
+            isNetworkError: true,
+            error: 'Internet connection required to verify username availability.',
+          };
+        }
+        // For other errors (table missing etc.), fall through to available
+        console.warn('Username cloud check error (non-network):', msg);
       }
 
       return { available: true };
