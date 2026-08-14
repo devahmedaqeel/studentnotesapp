@@ -424,7 +424,7 @@ export const connectService = {
     const db = await getDatabase();
     const now = Date.now();
 
-    // 1. Idempotency Check: if profile already exists with established username and Student ID, return it!
+    // 1. Idempotency Check: if profile already exists locally in SQLite, return it immediately
     const existing = await db.getFirstAsync<any>(
       `SELECT * FROM student_profiles WHERE id = ?`,
       [userId]
@@ -441,7 +441,7 @@ export const connectService = {
       return this.mapRowToProfile(existing);
     }
 
-    // 2. Also check Supabase for an existing cloud profile
+    // 2. Check Supabase cloud student_profiles table
     try {
       const { data: cloudProfile } = await supabase
         .from('student_profiles')
@@ -449,8 +449,8 @@ export const connectService = {
         .eq('id', userId)
         .maybeSingle();
 
-      if (cloudProfile && cloudProfile.username && cloudProfile.public_student_id) {
-        // Sync cloud profile to local SQLite
+      if (cloudProfile && cloudProfile.username && !cloudProfile.username.startsWith('student_')) {
+        // Sync established cloud profile to local SQLite
         await db.runAsync(
           `INSERT OR REPLACE INTO student_profiles (
             id, username, publicStudentId, displayName, avatarUrl, bio,
@@ -460,7 +460,7 @@ export const connectService = {
           [
             cloudProfile.id,
             cloudProfile.username,
-            cloudProfile.public_student_id,
+            cloudProfile.public_student_id || this.generatePublicStudentId(),
             cloudProfile.display_name || metadata?.fullName || 'Student',
             cloudProfile.avatar_url || metadata?.avatarUrl || null,
             cloudProfile.bio || null,
@@ -478,6 +478,27 @@ export const connectService = {
         );
 
         return (await this.getProfile(userId))!;
+      }
+    } catch (e) {
+      console.warn('Cloud student_profiles check warning:', e);
+    }
+
+    // 3. Check Supabase Auth user metadata or profiles table for previously established username
+    try {
+      const { data: authUserData } = await supabase.auth.getUser();
+      const metaUsername = authUserData?.user?.user_metadata?.username;
+      if (metaUsername && typeof metaUsername === 'string' && metaUsername.trim().length >= 3) {
+        const cleanMeta = metaUsername.trim().replace(/^@/, '').toLowerCase();
+        // Use the saved username from user metadata!
+        return await this.saveProfile(userId, {
+          username: cleanMeta,
+          displayName: metadata?.fullName || authUserData.user?.user_metadata?.full_name || 'Student',
+          publicStudentId: existing?.publicStudentId || this.generatePublicStudentId(),
+          avatarUrl: metadata?.avatarUrl,
+          university: metadata?.university,
+          program: metadata?.program,
+          semester: metadata?.semester,
+        });
       }
     } catch {}
 

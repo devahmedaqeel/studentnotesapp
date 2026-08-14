@@ -46,6 +46,8 @@ export interface AuthContextType {
 
 const HAS_CHOSEN_MODE_KEY = 'studentnotes_has_chosen_mode';
 const LOCAL_PROFILE_KEY = 'studentnotes_local_profile';
+// Per-user scoped profile key — ensures Gmail A and Gmail B never share a stored profile
+const userProfileKey = (userId: string) => `studentnotes_profile_${userId}`;
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
@@ -208,17 +210,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const googleName = meta.full_name || meta.name || '';
       const googleAvatar = meta.avatar_url || meta.picture || undefined;
 
+      // Load user-scoped local cache (each Google account has its own key)
+      const scopedKey = userProfileKey(userId);
       const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
-      const local = await AsyncStorage.getItem(LOCAL_PROFILE_KEY);
+      const local = await AsyncStorage.getItem(scopedKey);
       const parsed = local ? JSON.parse(local) : {};
+
+      // Initialize / restore student connect identity (idempotent — will load existing username from cloud)
+      let connectUsername: string | undefined;
+      try {
+        const connectProf = await connectService.initializeStudentAccount(userId, {
+          fullName: parsed.fullName || googleName || userEmail.split('@')[0],
+          email: userEmail,
+          avatarUrl: parsed.avatarUrl || googleAvatar,
+          university: parsed.university,
+          program: parsed.program,
+          semester: parsed.semester,
+        });
+        connectUsername = connectProf?.username;
+        await presenceService.startPresence(userId);
+      } catch {}
 
       if (data) {
         const univ = data.university || data.institution || '';
         const nameToUse = data.full_name || googleName || parsed.fullName || userEmail.split('@')[0];
         const avatarToUse = data.avatar_url || googleAvatar || parsed.avatarUrl || undefined;
 
-        setProfile({
+        const builtProfile: UserProfile = {
           id: data.id,
+          username: connectUsername || parsed.username,
           fullName: nameToUse,
           email: data.email || userEmail,
           department: data.department || '',
@@ -235,7 +255,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           avatarUrl: avatarToUse,
           ringColor: data.ring_color || parsed?.ringColor || '#6366F1',
           profileCompleted: Boolean(data.profile_completed || (nameToUse && univ)),
-        });
+        };
+        setProfile(builtProfile);
+        // Persist to user-scoped key
+        await AsyncStorage.setItem(scopedKey, JSON.stringify(builtProfile));
       } else {
         // Fallback profile for new signups
         const univ = parsed.university || parsed.institution || '';
@@ -244,6 +267,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const newProfile: UserProfile = {
           id: userId,
+          username: connectUsername || parsed.username,
           fullName: nameToUse,
           email: userEmail,
           department: parsed.department || '',
@@ -263,8 +287,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
 
         setProfile(newProfile);
+        await AsyncStorage.setItem(scopedKey, JSON.stringify(newProfile));
 
-        // Auto-persist new Google profile to database
+        // Auto-persist new Google profile to Supabase
         try {
           await supabase.from('profiles').upsert({
             id: userId,
@@ -278,18 +303,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch {}
       }
 
-      // Initialize / backfill student connect identity automatically (idempotent)
+      // Download and restore all cloud data (notes, PDFs, subjects, etc.) for this user
       try {
-        await connectService.initializeStudentAccount(userId, {
-          fullName: parsed.fullName || googleName || userEmail.split('@')[0],
-          email: userEmail,
-          avatarUrl: parsed.avatarUrl || googleAvatar,
-          university: parsed.university,
-          program: parsed.program,
-          semester: parsed.semester,
-        });
-        await presenceService.startPresence(userId);
-      } catch {}
+        await syncService.downloadCloudDataToLocal(userId);
+      } catch (e) {
+        console.warn('Cloud data restore warning:', e);
+      }
     } catch {
       setProfile({
         id: userId,
@@ -690,6 +709,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     try {
       await presenceService.stopPresence();
+    } catch {}
+    // Sign out from Supabase — this clears the auth session
+    // but does NOT delete cloud data or user-scoped local profile cache
+    try {
       await supabase.auth.signOut();
     } catch {}
     setUser(null);
@@ -697,12 +720,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsOffline(true);
     setHasChosenMode(true);
     await AsyncStorage.setItem(HAS_CHOSEN_MODE_KEY, 'true');
-    await loadLocalProfile();
+    // Show a clean offline profile (not the user-scoped one — that stays preserved for next login)
+    setProfile({
+      fullName: 'Student User',
+      email: 'student@studentnotes.local',
+      department: '',
+      university: '',
+      institution: '',
+      studentStatus: 'Student',
+      semester: '',
+      gender: 'male',
+      avatarPreset: 'male_student',
+      ringColor: '#6366F1',
+      profileCompleted: false,
+    });
   };
 
   const updateProfile = async (data: Partial<UserProfile>): Promise<boolean> => {
     const univ = data.university || data.institution || profile?.university || profile?.institution || '';
     const updated: UserProfile = {
+      id: profile?.id || user?.id,
+      username: data.username ?? profile?.username,
       fullName: data.fullName ?? profile?.fullName ?? 'Student',
       email: profile?.email || user?.email || 'student@studentnotes.local',
       department: data.department ?? profile?.department ?? '',
@@ -722,7 +760,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     setProfile(updated);
+    // Save to legacy key AND user-scoped key for backward compat
     await AsyncStorage.setItem(LOCAL_PROFILE_KEY, JSON.stringify(updated));
+    if (user?.id) {
+      await AsyncStorage.setItem(userProfileKey(user.id), JSON.stringify(updated));
+    }
 
     const effectiveUserId = user?.id || 'guest_user';
 
