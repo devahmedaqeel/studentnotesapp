@@ -15,6 +15,7 @@ import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { Ionicons } from '@expo/vector-icons';
 import { folderRepository } from '../database/repositories/folderRepository';
 import { folderService } from '../services/folderService';
+import { trashRepository } from '../database/repositories/trashRepository';
 import { useNotes } from '../hooks/useNotes';
 import { usePdfs } from '../hooks/usePdfs';
 import { Folder } from '../types/folder';
@@ -50,11 +51,18 @@ export const FolderDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const handleDeleteFolder = async () => {
     try {
       setDeleting(true);
+      if (folder) {
+        await trashRepository.add({
+          itemId: folder.id,
+          itemType: 'folder',
+          metadata: folder,
+        });
+      }
       await folderService.deleteFolder(folderId, user?.id);
       setShowDeleteConfirm(false);
       navigation.goBack();
     } catch (err: any) {
-      Alert.alert('Delete Error', err.message || 'Failed to delete folder.');
+      Alert.alert('Delete Error', err.message || 'Failed to move folder to trash.');
     } finally {
       setDeleting(false);
     }

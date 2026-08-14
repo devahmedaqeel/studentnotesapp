@@ -16,7 +16,7 @@ export const trashRepository = {
     }));
   },
 
-  async add(item: { itemId: string; itemType: 'note' | 'pdf' | 'subject' | 'folder'; originalPath?: string; metadata: any }): Promise<TrashItem> {
+  async add(item: { itemId: string; itemType: 'note' | 'pdf' | 'subject' | 'folder' | 'document'; originalPath?: string; metadata: any }): Promise<TrashItem> {
     const db = await getDatabase();
     const id = generateId('trash');
     const now = Date.now();

@@ -268,7 +268,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
           />
           <AppButton
             title="Create PDF"
-            onPress={() => (navigation.getParent() as any)?.navigate('Scanner', {})}
+            onPress={() => (navigation.getParent() as any)?.navigate('CreatePdf', { imagePaths: [] })}
             icon="document"
             variant="secondary"
             size="large"

@@ -101,6 +101,10 @@ export const DocumentCropScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const bounds = getDisplayedBounds();
 
+  // Keep a ref to bounds so PanResponder closures always read the latest value
+  const boundsRef = useRef(bounds);
+  boundsRef.current = bounds;
+
   // Ref tracking start corners position during drag gestures
   const startQuadRef = useRef<QuadCorners>(DEFAULT_CORNERS);
 
@@ -116,8 +120,9 @@ export const DocumentCropScreen: React.FC<Props> = ({ navigation, route }) => {
       },
       onPanResponderMove: (_, gestureState) => {
         const { dx, dy } = gestureState;
-        const actualW = Math.max(10, bounds.actualW);
-        const actualH = Math.max(10, bounds.actualH);
+        const currentBounds = boundsRef.current;
+        const actualW = Math.max(10, currentBounds.actualW);
+        const actualH = Math.max(10, currentBounds.actualH);
 
         const deltaPctX = (dx / actualW) * 100;
         const deltaPctY = (dy / actualH) * 100;
@@ -171,8 +176,9 @@ export const DocumentCropScreen: React.FC<Props> = ({ navigation, route }) => {
       },
       onPanResponderMove: (_, gestureState) => {
         const { dx, dy } = gestureState;
-        const actualW = Math.max(10, bounds.actualW);
-        const actualH = Math.max(10, bounds.actualH);
+        const currentBounds = boundsRef.current;
+        const actualW = Math.max(10, currentBounds.actualW);
+        const actualH = Math.max(10, currentBounds.actualH);
 
         const deltaPctX = (dx / actualW) * 100;
         const deltaPctY = (dy / actualH) * 100;

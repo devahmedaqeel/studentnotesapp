@@ -37,6 +37,27 @@ export const imageService = {
   },
 
   /**
+   * Launch camera to capture a new photo.
+   */
+  async captureFromCamera(): Promise<string | null> {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      throw new Error('Camera permission denied.');
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      quality: 0.9,
+    });
+
+    if (result.canceled || !result.assets || result.assets.length === 0) {
+      return null;
+    }
+
+    return result.assets[0].uri;
+  },
+
+  /**
    * Pick and crop custom profile avatar photo (1:1 aspect ratio crop UI).
    */
   async pickProfileAvatar(): Promise<string | null> {

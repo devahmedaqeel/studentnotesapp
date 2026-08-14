@@ -11,6 +11,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { trashRepository } from '../database/repositories/trashRepository';
 import { noteRepository } from '../database/repositories/noteRepository';
 import { pdfRepository } from '../database/repositories/pdfRepository';
+import { subjectRepository } from '../database/repositories/subjectRepository';
+import { folderRepository } from '../database/repositories/folderRepository';
+import { documentRepository } from '../database/repositories/documentRepository';
 import { fileService } from '../services/fileService';
 import { TrashItem } from '../types/common';
 import { formatDate } from '../utils/date';
@@ -43,12 +46,10 @@ export const TrashScreen: React.FC<Props> = ({ navigation }) => {
       const metadata = JSON.parse(item.metadata);
 
       if (item.itemType === 'note') {
-        // Restore physical note folder
         const trashedPath = `${fileService.getTrashDir()}${item.itemId}`;
         if (item.originalPath) {
           await fileService.restoreFromTrash(trashedPath, item.originalPath);
         }
-        // Re-insert Note into DB
         await noteRepository.create(
           {
             title: metadata.title,
@@ -71,6 +72,32 @@ export const TrashScreen: React.FC<Props> = ({ navigation }) => {
           filePath: metadata.filePath,
           pageCount: metadata.pageCount,
         });
+      } else if (item.itemType === 'subject') {
+        await subjectRepository.create(
+          {
+            name: metadata.name,
+            icon: metadata.icon,
+            color: metadata.color,
+          },
+          metadata.id
+        );
+      } else if (item.itemType === 'folder') {
+        await folderRepository.create(
+          {
+            name: metadata.name,
+            subjectId: metadata.subjectId,
+          },
+          metadata.id
+        );
+      } else if (item.itemType === 'document') {
+        const trashedPath = `${fileService.getTrashDir()}${item.itemId}`;
+        if (item.originalPath) {
+          await fileService.restoreFromTrash(trashedPath, item.originalPath);
+        }
+        await documentRepository.create({
+          ...metadata,
+          id: metadata.id,
+        });
       }
 
       await trashRepository.remove(item.id);
@@ -81,15 +108,56 @@ export const TrashScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
-  const handleDeletePermanently = async (item: TrashItem) => {
-    try {
-      const trashedPath = `${fileService.getTrashDir()}${item.itemId}`;
-      await fileService.deletePermanently(trashedPath);
-      await trashRepository.remove(item.id);
-      await fetchTrash();
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to permanently delete item.');
-    }
+  const handleDeletePermanently = (item: TrashItem) => {
+    Alert.alert(
+      'Delete Permanently?',
+      'Are you sure you want to delete this item forever? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Forever',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const trashedPath = `${fileService.getTrashDir()}${item.itemId}`;
+              await fileService.deletePermanently(trashedPath);
+              await trashRepository.remove(item.id);
+              await fetchTrash();
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'Failed to permanently delete item.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleEmptyTrash = () => {
+    if (items.length === 0) return;
+    Alert.alert(
+      'Empty Entire Trash?',
+      'All items in trash will be permanently deleted. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Empty Trash',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              for (const item of items) {
+                const trashedPath = `${fileService.getTrashDir()}${item.itemId}`;
+                await fileService.deletePermanently(trashedPath);
+              }
+              await trashRepository.clear();
+              await fetchTrash();
+              Alert.alert('Trash Emptied', 'All items have been permanently deleted.');
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'Failed to empty trash.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const getItemTitle = (item: TrashItem): string => {
@@ -101,9 +169,38 @@ export const TrashScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
+  const getItemTypeIcon = (type: string) => {
+    switch (type) {
+      case 'note':
+        return 'document-text';
+      case 'pdf':
+        return 'document';
+      case 'subject':
+        return 'book';
+      case 'folder':
+        return 'folder';
+      case 'document':
+        return 'shield-checkmark';
+      default:
+        return 'trash';
+    }
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <AppHeader title="Trash" showBack onBack={() => navigation.goBack()} />
+      <AppHeader
+        title="Trash"
+        showBack
+        onBack={() => navigation.goBack()}
+        rightAction={
+          items.length > 0 ? (
+            <TouchableOpacity onPress={handleEmptyTrash} style={styles.emptyTrashBtn}>
+              <Ionicons name="trash-bin-outline" size={18} color="#EF4444" />
+              <Text style={styles.emptyTrashText}>Empty All</Text>
+            </TouchableOpacity>
+          ) : undefined
+        }
+      />
 
       {loading ? (
         <LoadingState message="Loading trash items..." />
@@ -130,7 +227,13 @@ export const TrashScreen: React.FC<Props> = ({ navigation }) => {
                     { backgroundColor: theme.colors.primaryLight, borderRadius: theme.radius.sm },
                   ]}
                 >
-                  <Text style={[theme.typography.badge, { color: theme.colors.primary }]}>
+                  <Ionicons
+                    name={getItemTypeIcon(item.itemType) as any}
+                    size={12}
+                    color={theme.colors.primary}
+                    style={{ marginRight: 4 }}
+                  />
+                  <Text style={[theme.typography.badge, { color: theme.colors.primary, textTransform: 'uppercase' }]}>
                     {item.itemType}
                   </Text>
                 </View>
@@ -164,7 +267,7 @@ export const TrashScreen: React.FC<Props> = ({ navigation }) => {
           ListEmptyComponent={
             <EmptyState
               title="Trash is Empty"
-              description="Items deleted from notes or PDFs will appear here for temporary recovery."
+              description="Items deleted anywhere in the app will appear here for recovery before permanent deletion."
               icon="trash-outline"
             />
           }
@@ -177,6 +280,20 @@ export const TrashScreen: React.FC<Props> = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   listContent: { padding: 16 },
+  emptyTrashBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    gap: 4,
+  },
+  emptyTrashText: {
+    color: '#EF4444',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   itemCard: {
     padding: 14,
     borderWidth: 1,
@@ -188,8 +305,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   typeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
   },
   actionRow: {
     flexDirection: 'row',

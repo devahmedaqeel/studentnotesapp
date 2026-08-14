@@ -53,9 +53,9 @@ export const subjectRepository = {
     };
   },
 
-  async create(input: CreateSubjectInput): Promise<Subject> {
+  async create(input: CreateSubjectInput, customId?: string): Promise<Subject> {
     const db = await getDatabase();
-    const id = generateId('subj');
+    const id = customId || generateId('subj');
     const now = Date.now();
     const icon = input.icon || 'book-outline';
     const color = input.color || '#4F46E5';

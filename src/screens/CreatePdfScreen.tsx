@@ -75,15 +75,34 @@ export const CreatePdfScreen: React.FC<Props> = ({ navigation, route }) => {
     setCropTargetIndex(null);
   };
 
-  const handleAddMoreImages = async () => {
+  const handleAddFromCamera = async () => {
+    try {
+      const uri = await imageService.captureFromCamera();
+      if (uri) {
+        setImagePaths((prev) => [...prev, uri]);
+      }
+    } catch (err: any) {
+      Alert.alert('Camera Error', err.message || 'Failed to capture photo.');
+    }
+  };
+
+  const handleAddFromGallery = async () => {
     try {
       const uris = await imageService.pickFromGallery(true);
       if (uris.length > 0) {
         setImagePaths((prev) => [...prev, ...uris]);
       }
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to add images.');
+      Alert.alert('Gallery Error', err.message || 'Failed to import gallery images.');
     }
+  };
+
+  const handleAddMoreImages = () => {
+    Alert.alert('Add Page Images', 'Choose how you want to add pages to this PDF:', [
+      { text: '📷 Take Photo', onPress: handleAddFromCamera },
+      { text: '🖼️ Choose from Gallery', onPress: handleAddFromGallery },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   };
 
   const handleCreatePdf = async () => {
@@ -93,23 +112,36 @@ export const CreatePdfScreen: React.FC<Props> = ({ navigation, route }) => {
       return;
     }
 
-    if (!selectedSubjectId) {
-      Alert.alert('Subject Required', 'Please select or create a subject first.');
-      return;
-    }
-
     if (imagePaths.length === 0) {
-      Alert.alert('No Pages', 'At least one page is required to generate a PDF.');
+      Alert.alert('No Pages', 'Please add at least one page from Camera or Gallery to generate a PDF.');
       return;
     }
 
     try {
       setCreating(true);
 
+      let targetSubjectId = selectedSubjectId;
+
+      // If user chose vault-only or no subjects exist, ensure or get a default subject
+      if (!targetSubjectId || targetSubjectId === 'vault_only') {
+        if (subjects.length > 0) {
+          targetSubjectId = subjects[0].id;
+        } else {
+          // Auto create a "General Notes" subject
+          const defaultSub = await subjectRepository.create({
+            name: 'General Notes',
+            icon: 'book-outline',
+            color: '#4F46E5',
+          });
+          targetSubjectId = defaultSub.id;
+          setSubjects([defaultSub]);
+        }
+      }
+
       const createdPdf = await pdfService.createPdfFromImages(
         {
           title: title.trim(),
-          subjectId: selectedSubjectId,
+          subjectId: targetSubjectId,
           folderId: selectedFolderId,
           imagePaths,
         },
@@ -117,12 +149,17 @@ export const CreatePdfScreen: React.FC<Props> = ({ navigation, route }) => {
         (msg) => setProgressMsg(msg)
       );
 
-      const targetSub = subjects.find((s) => s.id === selectedSubjectId);
-      const subjectName = targetSub ? targetSub.name : 'Subject';
+      // If user selected vault only, also register in Document Vault
+      if (selectedSubjectId === 'vault_only') {
+        await documentService.savePdfToVault(createdPdf.filePath, createdPdf.title);
+      }
+
+      const targetSub = subjects.find((s) => s.id === targetSubjectId);
+      const subjectName = targetSub ? targetSub.name : 'General Notes';
 
       Alert.alert(
         '🎉 PDF Created Successfully!',
-        `"${title.trim()}" has been saved in ${subjectName}.`,
+        `"${title.trim()}" is saved and ready.`,
         [
           {
             text: 'Save to Vault',
@@ -208,35 +245,63 @@ export const CreatePdfScreen: React.FC<Props> = ({ navigation, route }) => {
           </Text>
           <TouchableOpacity onPress={handleAddMoreImages}>
             <Text style={[theme.typography.caption, { color: theme.colors.primary, fontWeight: '700' }]}>
-              + Add Images
+              + Add Pages
             </Text>
           </TouchableOpacity>
         </View>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pageStrip}>
-          {imagePaths.map((uri, index) => (
-            <View key={index} style={[styles.pageCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-              <Image source={{ uri }} style={styles.pageThumb} resizeMode="cover" />
-              <View style={styles.pageLabelRow}>
-                <Text style={[theme.typography.caption, { color: theme.colors.textSecondary }]}>
-                  Page {index + 1}
-                </Text>
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  style={[styles.cropBtnSmall, { backgroundColor: theme.colors.primary }]}
-                  onPress={() => setCropTargetIndex(index)}
-                >
-                  <Ionicons name="crop" size={13} color="#FFFFFF" />
-                  <Text style={styles.cropBtnTextSmall}>Crop</Text>
-                </TouchableOpacity>
-              </View>
+        {imagePaths.length === 0 ? (
+          <View style={[styles.emptyPickerCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+            <Ionicons name="images-outline" size={36} color={theme.colors.textMuted} />
+            <Text style={[theme.typography.subtitle2, { color: theme.colors.text, marginTop: 8 }]}>
+              No Pages Added Yet
+            </Text>
+            <Text style={[theme.typography.caption, { color: theme.colors.textSecondary, textAlign: 'center', marginTop: 2, marginBottom: 12 }]}>
+              Capture pages with camera or pick existing pictures from gallery
+            </Text>
+            <View style={styles.emptyPickerActionRow}>
+              <TouchableOpacity
+                style={[styles.emptyActionBtn, { backgroundColor: theme.colors.primary }]}
+                onPress={handleAddFromCamera}
+              >
+                <Ionicons name="camera" size={16} color="#FFFFFF" />
+                <Text style={styles.emptyActionBtnText}>Camera</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.emptyActionBtn, { backgroundColor: theme.colors.cardSecondary, borderColor: theme.colors.border, borderWidth: 1 }]}
+                onPress={handleAddFromGallery}
+              >
+                <Ionicons name="images" size={16} color={theme.colors.text} />
+                <Text style={[styles.emptyActionBtnText, { color: theme.colors.text }]}>Gallery</Text>
+              </TouchableOpacity>
             </View>
-          ))}
-        </ScrollView>
+          </View>
+        ) : (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pageStrip}>
+            {imagePaths.map((uri, index) => (
+              <View key={index} style={[styles.pageCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                <Image source={{ uri }} style={styles.pageThumb} resizeMode="cover" />
+                <View style={styles.pageLabelRow}>
+                  <Text style={[theme.typography.caption, { color: theme.colors.textSecondary }]}>
+                    Page {index + 1}
+                  </Text>
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    style={[styles.cropBtnSmall, { backgroundColor: theme.colors.primary }]}
+                    onPress={() => setCropTargetIndex(index)}
+                  >
+                    <Ionicons name="crop" size={13} color="#FFFFFF" />
+                    <Text style={styles.cropBtnTextSmall}>Crop</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+        )}
 
         {/* 3. Subject Selection */}
         <Text style={[theme.typography.subtitle2, { color: theme.colors.text, marginTop: 16, marginBottom: 8 }]}>
-          Select Subject
+          Select Subject / Destination
         </Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalSelector}>
           {subjects.map((sub) => (
@@ -264,6 +329,30 @@ export const CreatePdfScreen: React.FC<Props> = ({ navigation, route }) => {
               </Text>
             </TouchableOpacity>
           ))}
+
+          {/* Vault Only Option */}
+          <TouchableOpacity
+            style={[
+              styles.chip,
+              {
+                backgroundColor: selectedSubjectId === 'vault_only' ? theme.colors.primary : theme.colors.card,
+                borderColor: selectedSubjectId === 'vault_only' ? theme.colors.primary : theme.colors.border,
+              },
+            ]}
+            onPress={() => {
+              setSelectedSubjectId('vault_only');
+              setSelectedFolderId(null);
+            }}
+          >
+            <Text
+              style={[
+                theme.typography.body2,
+                { color: selectedSubjectId === 'vault_only' ? '#FFFFFF' : theme.colors.text },
+              ]}
+            >
+              📁 Vault Only (No Subject)
+            </Text>
+          </TouchableOpacity>
         </ScrollView>
 
         {/* 4. Optional Folder Selection */}
@@ -418,4 +507,30 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   progressText: { fontSize: 13, fontWeight: '700' },
+  emptyPickerCard: {
+    padding: 20,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 8,
+  },
+  emptyPickerActionRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  emptyActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    gap: 6,
+  },
+  emptyActionBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
 });

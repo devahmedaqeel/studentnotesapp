@@ -10,7 +10,7 @@ export interface Tag {
 export interface TrashItem {
   id: string;
   itemId: string;
-  itemType: FileType | 'subject' | 'folder';
+  itemType: FileType | 'subject' | 'folder' | 'document';
   originalPath?: string;
   metadata: string; // JSON string of item backup
   deletedAt: number;

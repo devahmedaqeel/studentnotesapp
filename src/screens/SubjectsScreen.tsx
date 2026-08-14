@@ -18,6 +18,8 @@ import { fileService } from '../services/fileService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MainTabs'>;
 
+import { trashRepository } from '../database/repositories/trashRepository';
+
 export const SubjectsScreen: React.FC<Props> = ({ navigation }) => {
   const { theme } = useTheme();
   const { subjects, loading, error, refreshSubjects, deleteSubject } = useSubjects();
@@ -35,13 +37,18 @@ export const SubjectsScreen: React.FC<Props> = ({ navigation }) => {
   const handleDeleteConfirmed = async () => {
     if (!selectedSubject) return;
     try {
-      // Soft-delete / delete subject record & cleanup storage
-      await fileService.deleteSubjectStorage(selectedSubject.id);
+      // Soft-delete to Trash
+      await trashRepository.add({
+        itemId: selectedSubject.id,
+        itemType: 'subject',
+        metadata: selectedSubject,
+      });
       await deleteSubject(selectedSubject.id);
       setShowDeleteConfirm(false);
       setSelectedSubject(null);
+      refreshSubjects();
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to delete subject.');
+      Alert.alert('Error', err.message || 'Failed to move subject to trash.');
     }
   };
 

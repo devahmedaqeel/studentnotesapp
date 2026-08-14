@@ -16,6 +16,9 @@ import { RootStackParamList } from '../navigation/types';
 import { useTheme } from '../hooks/useTheme';
 import { useDocuments } from '../hooks/useDocuments';
 import { documentService } from '../services/documentService';
+import { fileService } from '../services/fileService';
+import { trashRepository } from '../database/repositories/trashRepository';
+import { documentRepository } from '../database/repositories/documentRepository';
 import { AppHeader } from '../components/common/AppHeader';
 import { SearchBar } from '../components/common/SearchBar';
 import { EmptyState } from '../components/common/EmptyState';
@@ -286,7 +289,22 @@ export const DocumentFolderDetailScreen: React.FC<Props> = ({ navigation, route 
         isDanger
         onConfirm={async () => {
           if (selectedDoc) {
-            await deleteDocument(selectedDoc.id, selectedDoc.filePath);
+            try {
+              if (selectedDoc.filePath) {
+                await fileService.moveToTrash(selectedDoc.filePath, selectedDoc.id);
+              }
+              await trashRepository.add({
+                itemId: selectedDoc.id,
+                itemType: 'document',
+                originalPath: selectedDoc.filePath,
+                metadata: selectedDoc,
+              });
+              await documentRepository.delete(selectedDoc.id);
+              onRefresh();
+            } catch (err: any) {
+              console.warn('Error moving document to trash:', err);
+              await deleteDocument(selectedDoc.id, selectedDoc.filePath);
+            }
             setShowDeleteConfirm(false);
             setSelectedDoc(null);
           }

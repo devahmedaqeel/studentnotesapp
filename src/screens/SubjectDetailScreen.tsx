@@ -85,24 +85,33 @@ export const SubjectDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const handleDeleteSubject = async () => {
     if (!subject) return;
     try {
-      await fileService.deleteSubjectStorage(subject.id);
+      await trashRepository.add({
+        itemId: subject.id,
+        itemType: 'subject',
+        metadata: subject,
+      });
       await deleteSubject(subject.id);
       setShowDeleteSubjectConfirm(false);
       navigation.goBack();
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to delete subject.');
+      Alert.alert('Error', err.message || 'Failed to move subject to trash.');
     }
   };
 
   const handleDeleteFolder = async () => {
     if (!selectedFolder) return;
     try {
+      await trashRepository.add({
+        itemId: selectedFolder.id,
+        itemType: 'folder',
+        metadata: selectedFolder,
+      });
       await folderService.deleteFolder(selectedFolder.id, user?.id);
       setShowDeleteFolderConfirm(false);
       setSelectedFolder(null);
       refreshFolders();
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to delete folder.');
+      Alert.alert('Error', err.message || 'Failed to move folder to trash.');
     }
   };
 

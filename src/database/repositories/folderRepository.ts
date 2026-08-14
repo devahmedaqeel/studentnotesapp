@@ -79,9 +79,9 @@ export const folderRepository = {
     };
   },
 
-  async create(input: CreateFolderInput): Promise<Folder> {
+  async create(input: CreateFolderInput, customId?: string): Promise<Folder> {
     const db = await getDatabase();
-    const id = generateId('fld');
+    const id = customId || generateId('fld');
     const now = Date.now();
 
     await db.runAsync(
