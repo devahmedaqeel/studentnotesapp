@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { useColorScheme, Appearance } from 'react-native';
+import { useColorScheme, Appearance, AppState, ColorSchemeName } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { lightTheme, darkTheme, Theme } from '../theme/theme';
 import { ThemeMode } from '../types/common';
@@ -21,11 +21,14 @@ const ThemeContext = createContext<ThemeContextType>({
 });
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const systemColorScheme = useColorScheme();
+  const hookScheme = useColorScheme();
+  const [systemScheme, setSystemScheme] = useState<ColorSchemeName>(
+    Appearance.getColorScheme() || hookScheme || 'light'
+  );
   const [themeMode, setThemeModeState] = useState<ThemeMode>('system');
   const [initialized, setInitialized] = useState(false);
 
-  // Load saved theme mode on mount
+  // Load saved theme mode preference on mount
   useEffect(() => {
     AsyncStorage.getItem(THEME_MODE_KEY)
       .then((saved) => {
@@ -43,22 +46,42 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     AsyncStorage.setItem(THEME_MODE_KEY, mode).catch(() => {});
   }, []);
 
-  // Listen for system appearance changes
+  // Real-time system appearance listener (handles notification shade toggles & quick settings)
   useEffect(() => {
-    const listener = Appearance.addChangeListener(({ colorScheme }) => {
-      // Force re-render when system theme changes (useColorScheme handles this,
-      // but we add a listener to ensure it triggers reliably on all devices)
+    const appearanceListener = Appearance.addChangeListener(({ colorScheme }) => {
+      if (colorScheme) {
+        setSystemScheme(colorScheme);
+      }
     });
-    return () => listener.remove();
+
+    // AppState listener (when returning from phone Settings or notification bar)
+    const appStateListener = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        const current = Appearance.getColorScheme();
+        if (current) {
+          setSystemScheme(current);
+        }
+      }
+    });
+
+    return () => {
+      appearanceListener.remove();
+      appStateListener.remove();
+    };
   }, []);
 
-  const activeDark =
-    themeMode === 'system' ? systemColorScheme === 'dark' : themeMode === 'dark';
+  // Sync with hookScheme if updated
+  useEffect(() => {
+    if (hookScheme) {
+      setSystemScheme(hookScheme);
+    }
+  }, [hookScheme]);
 
+  const effectiveSystemDark = (systemScheme || Appearance.getColorScheme()) === 'dark';
+  const activeDark = themeMode === 'system' ? effectiveSystemDark : themeMode === 'dark';
   const theme = activeDark ? darkTheme : lightTheme;
 
   if (!initialized) {
-    // Render nothing until we know the saved theme to prevent flash
     return null;
   }
 
@@ -77,4 +100,3 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 };
 
 export const useTheme = () => useContext(ThemeContext);
-
