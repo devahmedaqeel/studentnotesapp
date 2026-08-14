@@ -1,0 +1,55 @@
+{
+  "expo": {
+    "name": "StudentNotes",
+    "slug": "student-notes",
+    "scheme": "studentnotes",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0B0F19"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.studentnotes.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "StudentNotes needs camera access to scan your handwritten and printed notes.",
+        "NSPhotoLibraryUsageDescription": "StudentNotes needs access to your photos to import document images."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0B0F19"
+      },
+      "package": "com.studentnotes.app",
+      "softwareKeyboardLayoutMode": "resize",
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "StudentNotes needs camera access to scan your handwritten and printed notes."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "StudentNotes needs access to your photos to import document images."
+        }
+      ],
+      "expo-sqlite",
+      "expo-web-browser",
+      "expo-secure-store"
+    ]
+  }
+}

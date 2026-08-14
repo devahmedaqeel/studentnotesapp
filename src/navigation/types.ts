@@ -1,0 +1,58 @@
+import { NavigatorScreenParams } from '@react-navigation/native';
+
+export type MainTabParamList = {
+  Home: undefined;
+  Subjects: undefined;
+  ScannerTab: undefined;
+  Search: undefined;
+  Settings: undefined;
+};
+
+export type RootStackParamList = {
+  Welcome: undefined;
+  Login: undefined;
+  Register: undefined;
+  ForgotPassword: undefined;
+  OtpVerification: { email: string };
+  ResetPassword: { email?: string } | undefined;
+  ProfileSetup: { isEditing?: boolean } | undefined;
+  Profile: undefined;
+  EditProfile: undefined;
+  MainTabs: NavigatorScreenParams<MainTabParamList>;
+  SubjectDetail: { subjectId: string };
+  FolderDetail: { subjectId: string; folderId: string };
+  CreateSubject: { subjectId?: string };
+  CreateFolder: { subjectId: string; folderId?: string };
+  Scanner: { subjectId?: string; folderId?: string };
+  DocumentCropScreen: { imageUri: string; subjectId?: string; folderId?: string; pages?: string[] };
+  ScanPreview: { pages: string[]; subjectId?: string; folderId?: string };
+  SaveNote: { pages: string[]; subjectId?: string; folderId?: string };
+  NoteViewer: { noteId: string };
+  CreatePdf: { imagePaths: string[]; subjectId?: string; folderId?: string };
+  PdfViewer: { pdfId: string; filePath?: string; title?: string };
+  Favorites: undefined;
+  Trash: undefined;
+  CompressionCenter: undefined;
+  ImageCompression: { imageUris?: string[] };
+  PdfCompression: { pdfId?: string };
+  ImportantDocuments: { folderId?: string; filterType?: string } | undefined;
+  DocumentFolderDetail: { folderId: string; folderName?: string; folderColor?: string };
+  StudentDiary: { selectedDate?: string; filterType?: string } | undefined;
+  CreateDiaryEvent: { eventId?: string; initialDate?: string; presetEventType?: string; subjectId?: string } | undefined;
+  DiaryEventDetail: { eventId: string };
+  TodaySchedule: undefined;
+  MyTimetable: { initialDay?: string } | undefined;
+  AddClass: { classId?: string; initialDay?: string; initialSubjectId?: string } | undefined;
+  TimetableSettings: undefined;
+  Inbox: undefined;
+  StudentSearch: undefined;
+  StudentProfile: { userId: string };
+  Chat: { peerId: string };
+  Followers: { userId?: string } | undefined;
+  Following: { userId?: string } | undefined;
+  FollowRequests: undefined;
+  CreateStatus: undefined;
+  StatusViewer: { statuses: any[]; initialIndex?: number };
+  UsernameSettings: undefined;
+  BlockedStudents: undefined;
+};
