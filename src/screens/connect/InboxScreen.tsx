@@ -21,16 +21,14 @@ import { RootStackParamList } from '../../navigation/types';
 import { useTheme } from '../../hooks/useTheme';
 import { useAuth } from '../../context/AuthContext';
 import { useConnect } from '../../hooks/useConnect';
-import { useChat } from '../../hooks/useChat';
 import { useStatus } from '../../hooks/useStatus';
 import { EmptyState } from '../../components/common/EmptyState';
-import { ConversationCard } from '../../components/connect/ConversationCard';
 import { StatusCircleItem } from '../../components/connect/StatusCircleItem';
-import { ChatConversation } from '../../types/connect';
-import { chatService } from '../../services/chatService';
+import { connectService } from '../../services/connectService';
+import { StudentConnectProfile } from '../../types/connect';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Inbox'>;
-type TabType = 'chats' | 'status' | 'requests';
+type TabType = 'status' | 'requests' | 'friends';
 
 export const InboxScreen: React.FC<Props> = ({ navigation }) => {
   const { theme, isDark } = useTheme();
@@ -38,14 +36,13 @@ export const InboxScreen: React.FC<Props> = ({ navigation }) => {
   const { user } = useAuth();
   const myUserId = user?.id || 'guest_user';
 
-  const [activeTab, setActiveTab] = useState<TabType>('chats');
+  const [activeTab, setActiveTab] = useState<TabType>('status');
   const [refreshing, setRefreshing] = useState(false);
   const [searchFilter, setSearchFilter] = useState('');
+  const [friendsList, setFriendsList] = useState<StudentConnectProfile[]>([]);
 
   const {
     myProfile,
-    followers,
-    following,
     pendingRequests,
     refreshConnect,
     acceptRequest,
@@ -53,25 +50,27 @@ export const InboxScreen: React.FC<Props> = ({ navigation }) => {
   } = useConnect();
 
   const {
-    conversations,
-    loadConversations,
-  } = useChat();
-
-  const {
     myStatuses,
     recentUpdates,
     refreshStatuses,
   } = useStatus();
 
+  const loadFriends = async () => {
+    try {
+      const friends = await connectService.getFriends(myUserId);
+      setFriendsList(friends);
+    } catch {}
+  };
+
   useEffect(() => {
-    loadConversations();
     refreshStatuses();
     refreshConnect();
+    loadFriends();
   }, []);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([refreshConnect(), loadConversations(), refreshStatuses()]);
+    await Promise.all([refreshConnect(), refreshStatuses(), loadFriends()]);
     setRefreshing(false);
   };
 
@@ -91,34 +90,13 @@ export const InboxScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
-  const totalUnread = conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
-
-  const handleDeleteConversation = (item: ChatConversation) => {
-    Alert.alert(
-      `Delete Chat with ${item.peerProfile?.displayName || 'Student'}?`,
-      'This conversation and all messages will be permanently deleted from your chat box.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete Chat',
-          style: 'destructive',
-          onPress: async () => {
-            await chatService.deleteConversation(item.id);
-            await loadConversations();
-            await refreshConnect();
-          },
-        },
-      ]
-    );
-  };
-
-  const filteredConversations = conversations.filter((c) => {
+  const filteredFriends = friendsList.filter((f) => {
     if (!searchFilter.trim()) return true;
-    const name = c.peerProfile?.displayName?.toLowerCase() || '';
-    const user = c.peerProfile?.username?.toLowerCase() || '';
-    const studentId = c.peerProfile?.publicStudentId?.toLowerCase() || '';
+    const name = f.displayName.toLowerCase();
+    const username = f.username.toLowerCase();
+    const studentId = f.publicStudentId.toLowerCase();
     const query = searchFilter.toLowerCase();
-    return name.includes(query) || user.includes(query) || studentId.includes(query);
+    return name.includes(query) || username.includes(query) || studentId.includes(query);
   });
 
   const headerBg = isDark ? '#1F2C34' : '#008069';
@@ -167,7 +145,7 @@ export const InboxScreen: React.FC<Props> = ({ navigation }) => {
               style={styles.headerIconBtn}
               onPress={() => navigation.navigate('StudentSearch')}
             >
-              <Ionicons name="search" size={20} color="#FFFFFF" />
+              <Ionicons name="person-add-outline" size={20} color="#FFFFFF" />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -194,7 +172,7 @@ export const InboxScreen: React.FC<Props> = ({ navigation }) => {
           />
           <TextInput
             style={[styles.searchPillInput, { color: isDark ? '#E9EDEF' : '#111B21' }]}
-            placeholder="Search chats, students, or notes..."
+            placeholder="Search classmates or connections..."
             placeholderTextColor={isDark ? '#8696A0' : '#667781'}
             value={searchFilter}
             onChangeText={setSearchFilter}
@@ -207,24 +185,8 @@ export const InboxScreen: React.FC<Props> = ({ navigation }) => {
         </View>
       </View>
 
-      {/* Tabs: Chats / Status Updates / Follow Requests */}
+      {/* Tabs: Updates / Requests / Friends */}
       <View style={[styles.tabsWrap, { backgroundColor: headerBg }]}>
-        <TouchableOpacity
-          style={[styles.tabBtn, activeTab === 'chats' && styles.activeTabBorder]}
-          onPress={() => setActiveTab('chats')}
-        >
-          <View style={styles.tabInner}>
-            <Text style={[styles.tabText, activeTab === 'chats' ? styles.tabTextActive : styles.tabTextInactive]}>
-              Chats
-            </Text>
-            {totalUnread > 0 && (
-              <View style={styles.unreadTabPill}>
-                <Text style={styles.unreadTabNumber}>{totalUnread}</Text>
-              </View>
-            )}
-          </View>
-        </TouchableOpacity>
-
         <TouchableOpacity
           style={[styles.tabBtn, activeTab === 'status' && styles.activeTabBorder]}
           onPress={() => setActiveTab('status')}
@@ -252,88 +214,26 @@ export const InboxScreen: React.FC<Props> = ({ navigation }) => {
             )}
           </View>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabBtn, activeTab === 'friends' && styles.activeTabBorder]}
+          onPress={() => setActiveTab('friends')}
+        >
+          <View style={styles.tabInner}>
+            <Text style={[styles.tabText, activeTab === 'friends' ? styles.tabTextActive : styles.tabTextInactive]}>
+              Friends
+            </Text>
+            {friendsList.length > 0 && (
+              <View style={styles.unreadTabPill}>
+                <Text style={styles.unreadTabNumber}>{friendsList.length}</Text>
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
       </View>
 
       {/* Main Tab Content */}
-      {activeTab === 'chats' ? (
-        <View style={{ flex: 1 }}>
-          {/* Status Stories Horizontal Row */}
-          <View style={[styles.statusStripWrap, { backgroundColor: isDark ? '#111B21' : '#F8FAFC' }]}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statusScroll}>
-              {/* My Status Story */}
-              <StatusCircleItem
-                isMyStatus
-                myStatuses={myStatuses}
-                onPress={() => {
-                  if (myStatuses.length > 0) {
-                    navigation.navigate('StatusViewer', { statuses: myStatuses, initialIndex: 0 });
-                  } else {
-                    navigation.navigate('CreateStatus');
-                  }
-                }}
-                onAddPress={() => navigation.navigate('CreateStatus')}
-              />
-
-              {/* Classmate Updates */}
-              {recentUpdates.map((item) => (
-                <StatusCircleItem
-                  key={item.user.id}
-                  user={item.user}
-                  statuses={item.statuses}
-                  isViewed={item.isViewed}
-                  onPress={() =>
-                    navigation.navigate('StatusViewer', { statuses: item.statuses, initialIndex: 0 })
-                  }
-                />
-              ))}
-            </ScrollView>
-          </View>
-
-          {/* Conversations List */}
-          {filteredConversations.length === 0 ? (
-            <EmptyState
-              title={searchFilter ? 'No Matching Chats' : 'No Conversations Yet'}
-              description={
-                searchFilter
-                  ? `No chat matched "${searchFilter}". Tap below to search all students.`
-                  : 'Connect with university classmates to chat end-to-end encrypted and exchange lecture notes!'
-              }
-              icon="chatbubbles-outline"
-              actionTitle="Find Classmates"
-              onAction={() => navigation.navigate('StudentSearch')}
-            />
-          ) : (
-            <FlatList
-              data={filteredConversations}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) + 80 }}
-              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#25D366" />}
-              renderItem={({ item }) => (
-                <ConversationCard
-                  conversation={item}
-                  onPress={() => navigation.navigate('Chat', { peerId: item.peerId })}
-                  onLongPress={() => handleDeleteConversation(item)}
-                />
-              )}
-            />
-          )}
-
-          {/* WhatsApp Floating Action Button (FAB) */}
-          <TouchableOpacity
-            activeOpacity={0.85}
-            style={[
-              styles.fab,
-              {
-                backgroundColor: '#00A884',
-                bottom: Math.max(insets.bottom, 16) + 20,
-              },
-            ]}
-            onPress={() => navigation.navigate('StudentSearch')}
-          >
-            <Ionicons name="chatbubble-ellipses" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-      ) : activeTab === 'status' ? (
+      {activeTab === 'status' ? (
         <View style={{ flex: 1 }}>
           <ScrollView
             contentContainerStyle={[styles.statusTabScroll, { paddingBottom: Math.max(insets.bottom, 20) + 90 }]}
@@ -572,7 +472,7 @@ export const InboxScreen: React.FC<Props> = ({ navigation }) => {
             </TouchableOpacity>
           </View>
         </View>
-      ) : (
+      ) : activeTab === 'requests' ? (
         /* Requests Tab */
         <ScrollView
           contentContainerStyle={[styles.requestsTabScroll, { paddingBottom: Math.max(insets.bottom, 20) + 60 }]}
@@ -636,17 +536,75 @@ export const InboxScreen: React.FC<Props> = ({ navigation }) => {
                     style={[styles.reqBtn, { backgroundColor: '#00A884' }]}
                     onPress={async () => {
                       await acceptRequest(req.requesterId);
-                      await loadConversations();
                       await refreshConnect();
+                      await loadFriends();
                       Alert.alert(
                         'Connected!',
-                        `You are now connected with ${req.requesterProfile?.displayName || 'Student'}. You can now chat and exchange notes!`
+                        `You are now connected with ${req.requesterProfile?.displayName || 'Student'}.`
                       );
                     }}
                   >
                     <Ionicons name="checkmark" size={16} color="#FFFFFF" />
                   </TouchableOpacity>
                 </View>
+              </TouchableOpacity>
+            ))
+          )}
+        </ScrollView>
+      ) : (
+        /* Friends Tab */
+        <ScrollView
+          contentContainerStyle={[styles.requestsTabScroll, { paddingBottom: Math.max(insets.bottom, 20) + 60 }]}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#25D366" />}
+        >
+          {filteredFriends.length === 0 ? (
+            <EmptyState
+              title={searchFilter ? 'No Matching Friends' : 'No Friends Yet'}
+              description={
+                searchFilter
+                  ? `No friend matches "${searchFilter}".`
+                  : 'Connect with classmates from your university to see them here!'
+              }
+              icon="people-outline"
+              actionTitle="Find Classmates"
+              onAction={() => navigation.navigate('StudentSearch')}
+            />
+          ) : (
+            filteredFriends.map((item) => (
+              <TouchableOpacity
+                key={item.id}
+                activeOpacity={0.85}
+                style={[styles.requestCard, { backgroundColor: isDark ? '#1F2C34' : '#F0F2F5' }]}
+                onPress={() => navigation.navigate('StudentProfile', { userId: item.id })}
+              >
+                <View style={styles.requestAvatarWrap}>
+                  {item.avatarUrl ? (
+                    <Image source={{ uri: item.avatarUrl }} style={styles.requestAvatar} />
+                  ) : (
+                    <View style={[styles.requestAvatar, { backgroundColor: '#128C7E', alignItems: 'center', justifyContent: 'center' }]}>
+                      <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '800' }}>
+                        {item.displayName.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
+                  {item.onlineStatus === 'online' && <View style={styles.onlineDot} />}
+                </View>
+
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.requestName, { color: isDark ? '#E9EDEF' : '#111B21' }]} numberOfLines={1}>
+                    {item.displayName}
+                  </Text>
+                  <Text style={{ color: isDark ? '#8696A0' : '#667781', fontSize: 12, marginTop: 1 }}>
+                    @{item.username} • {item.publicStudentId}
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.viewProfileBtn, { borderColor: isDark ? '#2A3942' : '#CBD5E1' }]}
+                  onPress={() => navigation.navigate('StudentProfile', { userId: item.id })}
+                >
+                  <Text style={[styles.viewProfileBtnText, { color: isDark ? '#E9EDEF' : '#111B21' }]}>Profile</Text>
+                </TouchableOpacity>
               </TouchableOpacity>
             ))
           )}
@@ -770,14 +728,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#25D366',
     marginLeft: 5,
   },
-  statusStripWrap: {
-    paddingVertical: 8,
-    borderBottomWidth: 0.5,
-    borderBottomColor: 'rgba(0,0,0,0.08)',
-  },
-  statusScroll: {
-    paddingHorizontal: 10,
-  },
   fab: {
     position: 'absolute',
     right: 18,
@@ -880,6 +830,17 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 22,
   },
+  onlineDot: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#10B981',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
   requestName: {
     fontSize: 14.5,
     fontWeight: '800',
@@ -890,5 +851,15 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  viewProfileBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  viewProfileBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

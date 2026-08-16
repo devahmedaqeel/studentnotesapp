@@ -15,23 +15,7 @@ export interface ConnectionCounts {
   friendsCount: number;
   requestsCount: number;
   sentCount: number;
-  unreadCount: number;
 }
-
-export type MessageType =
-  | 'text'
-  | 'voice'
-  | 'image'
-  | 'pdf'
-  | 'document'
-  | 'system';
-
-export type MessageStatus =
-  | 'sending'
-  | 'sent'
-  | 'delivered'
-  | 'read'
-  | 'failed';
 
 export type StatusType = 'text' | 'image' | 'video';
 
@@ -64,74 +48,6 @@ export interface StudentConnection {
   receiverProfile?: StudentConnectProfile;
   createdAt: number;
   updatedAt: number;
-}
-
-export interface EncryptedPayload {
-  ciphertext: string;
-  iv: string;
-  hmac: string;
-  version: string;
-}
-
-export interface ChatConversation {
-  id: string;
-  peerId: string;
-  peerProfile?: StudentConnectProfile;
-  lastMessageId?: string;
-  lastMessagePreview?: string;
-  lastMessageTime?: number;
-  unreadCount: number;
-  isMuted: boolean;
-  mutedUntil?: number;
-  pinnedMessageId?: string;
-  updatedAt: number;
-}
-
-export interface ChatMessage {
-  id: string;
-  conversationId: string;
-  senderId: string;
-  recipientId: string;
-  messageType: MessageType;
-  ciphertext: string;
-  iv: string;
-  hmac: string;
-  decryptedText?: string;
-  attachmentPath?: string;
-  attachmentType?: string;
-  attachmentSize?: number;
-  attachmentName?: string;
-  duration?: number; // For voice messages in seconds
-  replyToId?: string;
-  replyToMessage?: {
-    senderName: string;
-    text: string;
-    type: MessageType;
-  };
-  status: MessageStatus;
-  isPinned?: boolean;
-  isDeleted?: boolean;
-  createdAt: number;
-  editedAt?: number;
-}
-
-export interface OutgoingQueuedMessage {
-  id: string;
-  conversationId: string;
-  recipientId: string;
-  messageType: MessageType;
-  ciphertext: string;
-  iv: string;
-  hmac: string;
-  decryptedText?: string;
-  attachmentLocalUri?: string;
-  attachmentName?: string;
-  attachmentType?: string;
-  attachmentSize?: number;
-  duration?: number;
-  replyToId?: string;
-  retryCount: number;
-  createdAt: number;
 }
 
 export interface StudentStatusStory {

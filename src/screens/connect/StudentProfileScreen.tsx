@@ -20,7 +20,6 @@ import { AppHeader } from '../../components/common/AppHeader';
 import { LoadingState } from '../../components/common/LoadingState';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { connectService } from '../../services/connectService';
-import { chatService } from '../../services/chatService';
 import { StudentConnectProfile, ConnectionStatus } from '../../types/connect';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'StudentProfile'>;
@@ -173,18 +172,6 @@ export const StudentProfileScreen: React.FC<Props> = ({ navigation, route }) => 
       Alert.alert('Error', e.message || 'Failed to unblock student.');
     } finally {
       setActionLoading(false);
-    }
-  };
-
-  // 8. Open Canonical Chat
-  const handleOpenChat = async () => {
-    if (!profile) return;
-    try {
-      const convId = chatService.getConversationId(myUserId, profile.id);
-      await chatService.ensureRemoteConversation(convId, myUserId, profile.id);
-      navigation.navigate('Chat', { peerId: profile.id });
-    } catch {
-      navigation.navigate('Chat', { peerId: profile.id });
     }
   };
 
@@ -355,19 +342,10 @@ export const StudentProfileScreen: React.FC<Props> = ({ navigation, route }) => 
                 <View style={styles.friendsBtnRow}>
                   <TouchableOpacity
                     activeOpacity={0.85}
-                    onPress={handleOpenChat}
-                    style={[styles.chatBtn, { backgroundColor: '#10B981' }]}
-                  >
-                    <Ionicons name="chatbubble-ellipses" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-                    <Text style={styles.chatBtnText}>Message</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    activeOpacity={0.85}
                     onPress={() => setShowRemoveFriendConfirm(true)}
-                    style={[styles.removeFriendBtn, { borderColor: theme.colors.border }]}
+                    style={[styles.removeFriendBtn, { borderColor: theme.colors.border, flex: 1 }]}
                   >
-                    <Text style={[styles.removeFriendBtnText, { color: theme.colors.danger }]}>Remove</Text>
+                    <Text style={[styles.removeFriendBtnText, { color: theme.colors.danger }]}>Remove Friend</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -446,12 +424,6 @@ export const StudentProfileScreen: React.FC<Props> = ({ navigation, route }) => 
             )}
           </View>
         )}
-
-        {!isMe && !isFriends && !isBlockedByMe && (
-          <Text style={[styles.mutualHint, { color: theme.colors.textSecondary }]}>
-            🔒 End-to-end encrypted chat unlocks automatically once you both connect.
-          </Text>
-        )}
       </ScrollView>
 
       {/* Cancel Request Confirmation Dialog */}
@@ -469,7 +441,7 @@ export const StudentProfileScreen: React.FC<Props> = ({ navigation, route }) => 
       <ConfirmDialog
         visible={showRemoveFriendConfirm}
         title="Remove Friend?"
-        message={`Are you sure you want to remove ${profile.displayName} from your friends? Your existing messages will remain preserved.`}
+        message={`Are you sure you want to remove ${profile.displayName} from your friends?`}
         confirmTitle="Remove"
         isDanger
         onConfirm={handleConfirmRemoveFriend}
@@ -480,7 +452,7 @@ export const StudentProfileScreen: React.FC<Props> = ({ navigation, route }) => 
       <ConfirmDialog
         visible={showBlockConfirm}
         title="Block Student?"
-        message={`Are you sure you want to block ${profile.displayName}? They will no longer be able to message you or see your online status.`}
+        message={`Are you sure you want to block ${profile.displayName}? They will no longer be able to connect with you or see your online status.`}
         confirmTitle="Block"
         isDanger
         onConfirm={handleConfirmBlock}
@@ -733,19 +705,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-  },
-  chatBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 46,
-    borderRadius: 12,
-  },
-  chatBtnText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
   },
   removeFriendBtn: {
     height: 46,

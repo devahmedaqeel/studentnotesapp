@@ -107,7 +107,7 @@ export const UsernameSetupModal: React.FC<UsernameSetupModalProps> = ({
 
           <Text style={[styles.title, { color: theme.colors.text }]}>Welcome to Student Connect</Text>
           <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
-            Create your unique username to connect with classmates, chat end-to-end encrypted, and share academic notes.
+            Create your unique username to connect with classmates, share status updates, and build your student network.
           </Text>
 
           {/* Inputs */}

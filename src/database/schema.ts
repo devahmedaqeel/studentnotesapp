@@ -218,63 +218,6 @@ CREATE TABLE IF NOT EXISTS student_blocked (
   FOREIGN KEY (blockedUserId) REFERENCES student_profiles(id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS chat_conversations (
-  id TEXT PRIMARY KEY,
-  peerId TEXT NOT NULL,
-  lastMessageId TEXT,
-  lastMessagePreview TEXT,
-  lastMessageTime INTEGER,
-  unreadCount INTEGER DEFAULT 0,
-  isMuted INTEGER DEFAULT 0,
-  mutedUntil INTEGER,
-  disappearingSeconds INTEGER DEFAULT 0,
-  pinnedMessageId TEXT,
-  updatedAt INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS chat_messages (
-  id TEXT PRIMARY KEY,
-  conversationId TEXT NOT NULL,
-  senderId TEXT NOT NULL,
-  recipientId TEXT NOT NULL,
-  messageType TEXT NOT NULL,
-  ciphertext TEXT NOT NULL,
-  iv TEXT NOT NULL,
-  hmac TEXT NOT NULL,
-  decryptedText TEXT,
-  attachmentPath TEXT,
-  attachmentType TEXT,
-  attachmentSize INTEGER DEFAULT 0,
-  attachmentName TEXT,
-  duration INTEGER DEFAULT 0,
-  replyToId TEXT,
-  status TEXT DEFAULT 'sending',
-  isPinned INTEGER DEFAULT 0,
-  isDeleted INTEGER DEFAULT 0,
-  createdAt INTEGER NOT NULL,
-  editedAt INTEGER,
-  FOREIGN KEY (conversationId) REFERENCES chat_conversations(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS chat_outgoing_queue (
-  id TEXT PRIMARY KEY,
-  conversationId TEXT NOT NULL,
-  recipientId TEXT NOT NULL,
-  messageType TEXT NOT NULL,
-  ciphertext TEXT NOT NULL,
-  iv TEXT NOT NULL,
-  hmac TEXT NOT NULL,
-  decryptedText TEXT,
-  attachmentLocalUri TEXT,
-  attachmentName TEXT,
-  attachmentType TEXT,
-  attachmentSize INTEGER DEFAULT 0,
-  duration INTEGER DEFAULT 0,
-  replyToId TEXT,
-  retryCount INTEGER DEFAULT 0,
-  createdAt INTEGER NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS student_statuses (
   id TEXT PRIMARY KEY,
   userId TEXT NOT NULL,
@@ -299,13 +242,6 @@ CREATE TABLE IF NOT EXISTS status_views (
   viewedAt INTEGER NOT NULL,
   FOREIGN KEY (statusId) REFERENCES student_statuses(id) ON DELETE CASCADE,
   FOREIGN KEY (viewerId) REFERENCES student_profiles(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS chat_keys (
-  userId TEXT PRIMARY KEY,
-  publicKey TEXT NOT NULL,
-  fingerprint TEXT NOT NULL,
-  updatedAt INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS user_privacy_settings (
@@ -365,7 +301,6 @@ CREATE INDEX IF NOT EXISTS idx_timetable_subjectId ON timetable_classes(subjectI
 CREATE INDEX IF NOT EXISTS idx_student_profiles_username ON student_profiles(username);
 CREATE INDEX IF NOT EXISTS idx_student_profiles_studentId ON student_profiles(publicStudentId);
 CREATE INDEX IF NOT EXISTS idx_student_connections_req_rec ON student_connections(requesterId, receiverId);
-CREATE INDEX IF NOT EXISTS idx_chat_messages_conv ON chat_messages(conversationId, createdAt);
 CREATE INDEX IF NOT EXISTS idx_student_statuses_expiry ON student_statuses(expiresAt);
 CREATE INDEX IF NOT EXISTS idx_saved_links_cleanedUrl ON saved_links(cleanedUrl);
 CREATE INDEX IF NOT EXISTS idx_saved_links_resourceType ON saved_links(resourceType);

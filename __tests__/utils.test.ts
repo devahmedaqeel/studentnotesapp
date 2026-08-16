@@ -5,7 +5,6 @@ import { formatPageCount, formatNoteCount, formatPdfCount } from '../src/utils/f
 import { diaryService } from '../src/services/diaryService';
 import { timetableService } from '../src/services/timetableService';
 import { connectService } from '../src/services/connectService';
-import { e2eeService } from '../src/services/e2eeService';
 import { statusService } from '../src/services/statusService';
 import { base64ToUint8Array, uint8ArrayToBase64, base64ToArrayBuffer } from '../src/utils/binary';
 
@@ -203,7 +202,7 @@ describe('Utility Functions Unit Tests', () => {
     });
   });
 
-  describe('Student Connect & E2EE Cryptography', () => {
+  describe('Student Connect', () => {
     test('validates username rules correctly', () => {
       expect(connectService.validateUsername('ahmed_aqeel').isValid).toBe(true);
       expect(connectService.validateUsername('ali123').isValid).toBe(true);
@@ -216,36 +215,6 @@ describe('Utility Functions Unit Tests', () => {
     test('generates valid public student ID', () => {
       const stuId = connectService.generatePublicStudentId();
       expect(stuId).toMatch(/^STU-[A-Z0-9]{6}$/);
-    });
-
-    test('encrypts and decrypts text client-side end-to-end', async () => {
-      const plainMessage = 'Hello, can you send the Database Lecture 5 notes?';
-      const testSecretKey = 'test_shared_secret_key_32_bytes_len_12345';
-
-      const encrypted = await e2eeService.encryptText(plainMessage, testSecretKey);
-      expect(encrypted.ciphertext).not.toBe(plainMessage);
-      expect(encrypted.iv).toBeDefined();
-      expect(encrypted.hmac).toBeDefined();
-
-      const decrypted = await e2eeService.decryptText(encrypted, testSecretKey);
-      expect(decrypted).toBe(plainMessage);
-    });
-
-    test('derives the same conversation key for both chat participants', async () => {
-      const keyA = await e2eeService.deriveConversationKey('user_a', 'user_b');
-      const keyB = await e2eeService.deriveConversationKey('user_b', 'user_a');
-
-      expect(keyA).toBe(keyB);
-    });
-
-    test('detects tampered ciphertext HMAC integrity check', async () => {
-      const plainMessage = 'Confidential exam tips';
-      const secret = 'secret_key_12345678901234567890';
-
-      const encrypted = await e2eeService.encryptText(plainMessage, secret);
-      const tampered = { ...encrypted, ciphertext: encrypted.ciphertext + 'tampered' };
-
-      await expect(e2eeService.decryptText(tampered, secret)).rejects.toThrow();
     });
 
     test('formats 24-hour status expiration correctly', () => {
@@ -282,40 +251,6 @@ describe('Utility Functions Unit Tests', () => {
       }
     });
 
-    test('encrypts, decrypts, and preserves native Unicode emoji messages', async () => {
-      const emojiMessage = 'Good luck on the exams! 😂 ❤️ 👍 🔥 🎓 📚';
-      const testSecretKey = 'test_shared_secret_key_32_bytes_len_12345';
-
-      const encrypted = await e2eeService.encryptText(emojiMessage, testSecretKey);
-      expect(encrypted.ciphertext).not.toContain('😂');
-
-      const decrypted = await e2eeService.decryptText(encrypted, testSecretKey);
-      expect(decrypted).toBe(emojiMessage);
-    });
-
-    test('encrypts and decrypts multiline text with special characters and emojis', async () => {
-      const multilineMsg = `Hello Sara!\nI want to send you my assignment.\nPlease check it. 📚\nI have attached the PDF. 👍`;
-      const testSecretKey = 'test_shared_secret_key_32_bytes_len_12345';
-
-      const encrypted = await e2eeService.encryptText(multilineMsg, testSecretKey);
-      const decrypted = await e2eeService.decryptText(encrypted, testSecretKey);
-      expect(decrypted).toBe(multilineMsg);
-      expect(decrypted.split('\n').length).toBe(4);
-    });
-
-    test('maintains complete isolation between Status Views and Chat activity', () => {
-      const statusAction = {
-        type: 'STATUS_VIEW',
-        statusId: 'status_123',
-        viewerId: 'user_ahmed',
-        ownerId: 'user_saif',
-      };
-
-      // Status viewing must NOT create conversation or update chat timestamps
-      expect(statusAction.type).not.toBe('CHAT_MESSAGE');
-      expect(statusAction.statusId).toBeDefined();
-    });
-
     test('deduplicates multiple status views by the same viewer into a single viewer count', () => {
       const rawViews = [
         { statusId: 'status_saif_1', viewerId: 'user_ahmed', viewedAt: 1000 },
@@ -349,7 +284,7 @@ describe('Utility Functions Unit Tests', () => {
       expect(resolvedStudentId).toBe(originalStudentId);
     });
 
-    test('maintains single source of truth across Profile Settings, Search, and Chat', () => {
+    test('maintains single source of truth across Profile Settings, Search, and Student Profile', () => {
       const canonicalProfile = {
         id: 'user_ahmed_1',
         displayName: 'Ahmed Aqeel',
@@ -370,18 +305,11 @@ describe('Utility Functions Unit Tests', () => {
         avatarUrl: canonicalProfile.avatarUrl,
       };
 
-      // Chat Header projection
-      const chatHeaderView = {
-        displayName: canonicalProfile.displayName,
-        username: canonicalProfile.username,
-        avatarUrl: canonicalProfile.avatarUrl,
-      };
-
       // Student Profile Screen projection
       const profileScreenView = { ...canonicalProfile };
 
       expect(searchCardView.displayName).toBe(canonicalProfile.displayName);
-      expect(chatHeaderView.avatarUrl).toBe(canonicalProfile.avatarUrl);
+      expect(profileScreenView.avatarUrl).toBe(canonicalProfile.avatarUrl);
       expect(profileScreenView.publicStudentId).toBe(canonicalProfile.publicStudentId);
     });
 

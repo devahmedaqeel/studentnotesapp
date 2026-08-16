@@ -19,9 +19,6 @@ export const LOCAL_DATA_OWNER_KEY = 'studentnotes_local_data_owner';
 const USER_DATA_TABLES_DELETE_ORDER = [
   'status_views',
   'student_statuses',
-  'chat_outgoing_queue',
-  'chat_messages',
-  'chat_conversations',
   'student_blocked',
   'student_connections',
   'username_history',

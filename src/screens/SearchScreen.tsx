@@ -12,7 +12,6 @@ import { PdfCard } from '../components/pdf/PdfCard';
 import { ResourceCard } from '../components/links/ResourceCard';
 import { EmptyState } from '../components/common/EmptyState';
 import { LoadingState } from '../components/common/LoadingState';
-import { FloatingProfileButton } from '../components/common/FloatingProfileButton';
 import { useSearch } from '../hooks/useSearch';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MainTabs'>;
@@ -182,9 +181,6 @@ export const SearchScreen: React.FC<Props> = ({ navigation }) => {
           )}
         </ScrollView>
       )}
-
-      {/* Floating Profile Access Button */}
-      <FloatingProfileButton bottomOffset={20} />
     </View>
   );
 };

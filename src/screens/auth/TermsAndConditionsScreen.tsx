@@ -46,7 +46,7 @@ export const TermsAndConditionsScreen: React.FC<Props> = ({ navigation }) => {
 
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>4. Student Connect & Social Conduct</Text>
           <Text style={[styles.bodyText, { color: theme.colors.textSecondary }]}>
-            When utilizing Student Connect features (such as Classmate Search, Friend Requests, Follows, Status Stories, and Encrypted Direct Chat), you agree to treat fellow classmates with respect. The following conduct is strictly prohibited:
+            When utilizing Student Connect features (such as Classmate Search, Friend Requests, Follows, and Status Stories), you agree to treat fellow classmates with respect. The following conduct is strictly prohibited:
           </Text>
           <Text style={[styles.bulletText, { color: theme.colors.textSecondary }]}>
             • Harassment, bullying, hate speech, or offensive language.

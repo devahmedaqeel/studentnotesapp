@@ -52,7 +52,6 @@ export type RootStackParamList = {
   Inbox: undefined;
   StudentSearch: undefined;
   StudentProfile: { userId: string };
-  Chat: { peerId: string };
   MyFriends: { userId?: string } | undefined;
   Followers: { userId?: string } | undefined;
   Following: { userId?: string } | undefined;

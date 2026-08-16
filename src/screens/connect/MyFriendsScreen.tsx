@@ -21,7 +21,6 @@ import { EmptyState } from '../../components/common/EmptyState';
 import { LoadingState } from '../../components/common/LoadingState';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { connectService } from '../../services/connectService';
-import { chatService } from '../../services/chatService';
 import { StudentConnectProfile } from '../../types/connect';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -70,16 +69,6 @@ export const MyFriendsScreen: React.FC<Props> = ({ navigation, route }) => {
       f.publicStudentId.toLowerCase().includes(q)
     );
   });
-
-  const handleMessage = async (peer: StudentConnectProfile) => {
-    try {
-      const convId = chatService.getConversationId(myUserId, peer.id);
-      await chatService.ensureRemoteConversation(convId, myUserId, peer.id);
-      navigation.navigate('Chat', { peerId: peer.id });
-    } catch {
-      navigation.navigate('Chat', { peerId: peer.id });
-    }
-  };
 
   const handleConfirmRemove = async () => {
     if (!friendToRemove) return;
@@ -217,18 +206,10 @@ export const MyFriendsScreen: React.FC<Props> = ({ navigation, route }) => {
               {/* Action Buttons Row */}
               <View style={[styles.actionsRow, { borderTopColor: isDark ? 'rgba(255,255,255,0.06)' : '#F1F5F9' }]}>
                 <TouchableOpacity
-                  style={[styles.msgBtn, { backgroundColor: theme.colors.primary }]}
-                  onPress={() => handleMessage(item)}
-                >
-                  <Ionicons name="chatbubble-ellipses-outline" size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
-                  <Text style={styles.msgBtnText}>Message</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.actionBtn, { borderColor: theme.colors.border }]}
+                  style={[styles.actionBtn, { borderColor: theme.colors.border, flex: 1 }]}
                   onPress={() => navigation.navigate('StudentProfile', { userId: item.id })}
                 >
-                  <Text style={[styles.actionBtnText, { color: theme.colors.text }]}>Profile</Text>
+                  <Text style={[styles.actionBtnText, { color: theme.colors.text }]}>View Profile</Text>
                 </TouchableOpacity>
 
                 {isMe && (

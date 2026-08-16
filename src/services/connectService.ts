@@ -735,7 +735,7 @@ export const connectService = {
   },
 
   /**
-   * Checks if mutual connection exists (strict requirement for private chat).
+   * Checks if mutual connection exists.
    */
   async checkMutualConnection(userIdA: string, userIdB: string): Promise<boolean> {
     const status = await this.getConnectionStatus(userIdA, userIdB);
@@ -1156,7 +1156,6 @@ export const connectService = {
     friendsCount: number;
     requestsCount: number;
     sentCount: number;
-    unreadCount: number;
   }> {
     const db = await getDatabase();
 
@@ -1175,16 +1174,10 @@ export const connectService = {
       [userId]
     );
 
-    // 4. Unread messages count
-    const unreadRow = await db.getFirstAsync<any>(
-      `SELECT SUM(unreadCount) as totalUnread FROM chat_conversations`
-    );
-
     return {
       friendsCount: friends.length,
       requestsCount: incomingRows.length,
       sentCount: sentRows.length,
-      unreadCount: unreadRow?.totalUnread || 0,
     };
   },
 

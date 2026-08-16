@@ -38,16 +38,7 @@ export const notificationService = {
           sound: 'default',
         });
 
-        // 3. Chat & Messages Channel
-        await Notifications.setNotificationChannelAsync('messages', {
-          name: 'Student Chat & Direct Messages',
-          importance: Notifications.AndroidImportance.HIGH,
-          vibrationPattern: [0, 200, 200, 200],
-          lightColor: '#10B981',
-          sound: 'default',
-        });
-
-        // 4. Social & Follow Requests Channel
+        // 3. Social & Follow Requests Channel
         await Notifications.setNotificationChannelAsync('social-requests', {
           name: 'Student Follow Requests & Social',
           importance: Notifications.AndroidImportance.HIGH,
@@ -56,7 +47,7 @@ export const notificationService = {
           sound: 'default',
         });
 
-        // 5. General Academic Reminders Channel
+        // 4. General Academic Reminders Channel
         await Notifications.setNotificationChannelAsync('general-reminders', {
           name: 'General Academic Reminders',
           importance: Notifications.AndroidImportance.DEFAULT,
@@ -222,36 +213,6 @@ export const notificationService = {
   },
 
   /**
-   * Dispatches an in-app or local push notification when a new chat message arrives in background.
-   */
-  async scheduleLocalMessageNotification(
-    senderName: string,
-    messagePreview: string,
-    conversationId: string,
-    peerId: string
-  ): Promise<string | undefined> {
-    try {
-      const id = await Notifications.scheduleNotificationAsync({
-        content: {
-          title: `💬 ${senderName}`,
-          body: messagePreview,
-          data: { conversationId, peerId, type: 'chat_message' },
-          sound: 'default',
-        },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-          seconds: 1,
-          channelId: 'messages',
-        },
-      });
-      return id;
-    } catch (e) {
-      console.warn('Failed to schedule chat message notification:', e);
-      return undefined;
-    }
-  },
-
-  /**
    * Dispatches a local notification for incoming follow requests.
    */
   async scheduleFollowRequestNotification(
@@ -314,9 +275,7 @@ export const notificationService = {
   handleNotificationResponse(data: any, navigateFn: (screen: string, params?: any) => void): void {
     if (!data) return;
 
-    if (data.type === 'chat_message' && data.peerId) {
-      navigateFn('Chat', { peerId: data.peerId });
-    } else if (data.type === 'follow_request') {
+    if (data.type === 'follow_request') {
       navigateFn('FollowRequests');
     } else if (data.type === 'shared_pdf' && data.pdfId) {
       navigateFn('PdfViewer', { pdfId: data.pdfId });

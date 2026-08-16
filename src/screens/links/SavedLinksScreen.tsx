@@ -20,7 +20,6 @@ import { SearchBar } from '../../components/common/SearchBar';
 import { EmptyState } from '../../components/common/EmptyState';
 import { LoadingState } from '../../components/common/LoadingState';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
-import { FloatingProfileButton } from '../../components/common/FloatingProfileButton';
 import { ResourceCard } from '../../components/links/ResourceCard';
 import { savedLinkRepository } from '../../database/repositories/savedLinkRepository';
 import { subjectRepository } from '../../database/repositories/subjectRepository';
@@ -309,9 +308,6 @@ export const SavedLinksScreen: React.FC<Props> = ({ navigation, route }) => {
           showsVerticalScrollIndicator={false}
         />
       )}
-
-      {/* Floating Profile Button */}
-      <FloatingProfileButton bottomOffset={20} />
 
       {/* Sort Options Modal */}
       <Modal visible={showSortModal} transparent animationType="fade" onRequestClose={() => setShowSortModal(false)}>

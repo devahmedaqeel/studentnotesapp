@@ -8,29 +8,24 @@ interface StudentSearchCardProps {
   student: StudentConnectProfile;
   onPress: () => void;
   onFollowAction?: () => void;
-  onChatAction?: () => void;
 }
 
 export const StudentSearchCard: React.FC<StudentSearchCardProps> = ({
   student,
   onPress,
   onFollowAction,
-  onChatAction,
 }) => {
   const { theme, isDark } = useTheme();
 
   const renderActionButton = () => {
     switch (student.connectionStatus) {
       case 'connected':
+      case 'friends':
         return (
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={onChatAction || onPress}
-            style={[styles.actionBtn, { backgroundColor: '#00A884' }]}
-          >
-            <Ionicons name="chatbubble-ellipses-outline" size={13} color="#FFFFFF" style={{ marginRight: 4 }} />
-            <Text style={styles.actionBtnText}>Chat</Text>
-          </TouchableOpacity>
+          <View style={[styles.statusBadge, { backgroundColor: isDark ? '#1F2C34' : theme.colors.cardSecondary }]}>
+            <Ionicons name="checkmark-circle" size={13} color="#10B981" style={{ marginRight: 4 }} />
+            <Text style={[styles.statusBadgeText, { color: '#10B981' }]}>Friends</Text>
+          </View>
         );
       case 'following':
         return (

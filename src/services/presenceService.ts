@@ -3,23 +3,14 @@ import { supabase } from './supabase';
 import { getDatabase } from '../database/database';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { notificationService } from './notificationService';
-import { e2eeService } from './e2eeService';
 import { connectService } from './connectService';
 
 let presenceChannel: RealtimeChannel | null = null;
 let notificationsChannel: RealtimeChannel | null = null;
 let appStateSubscription: any = null;
 let activeUserId: string | null = null;
-let currentActiveChatPeerId: string | null = null;
 
 export const presenceService = {
-  /**
-   * Sets currently active chat peer ID so notifications aren't duplicated while chatting.
-   */
-  setActiveChatPeer(peerId: string | null): void {
-    currentActiveChatPeerId = peerId;
-  },
-
   /**
    * Initializes Supabase Realtime presence and realtime event listeners for the authenticated student.
    */
@@ -58,7 +49,7 @@ export const presenceService = {
           }
         });
 
-      // 3. Setup Global Realtime Inbound Notifications & Messages Channel
+      // 3. Setup Global Realtime Inbound Notifications Channel (Follow Requests)
       if (notificationsChannel) {
         await notificationsChannel.unsubscribe();
       }
@@ -66,107 +57,6 @@ export const presenceService = {
       notificationsChannel = supabase.channel(`user_events_${userId}`);
 
       notificationsChannel
-        // Listen for new inbound messages
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'chat_messages',
-            filter: `recipient_id=eq.${userId}`,
-          },
-          async (payload) => {
-            const raw = payload.new;
-            if (!raw || raw.sender_id === userId) return;
-
-            const conversationId = raw.conversation_id;
-            const senderId = raw.sender_id;
-
-            try {
-              const db = await getDatabase();
-              const now = Date.now();
-
-              // Derive key and decrypt preview
-              let preview = 'New message received';
-              try {
-                const secretKey = await e2eeService.deriveConversationKey(userId, senderId);
-                if (raw.message_type === 'text' && raw.ciphertext) {
-                  const decrypted = await e2eeService.decryptText(
-                    { ciphertext: raw.ciphertext, iv: raw.iv, hmac: raw.hmac, version: '1.0' },
-                    secretKey
-                  );
-                  preview = decrypted;
-                } else if (raw.message_type === 'voice') {
-                  preview = '🎤 Voice message';
-                } else if (raw.message_type === 'pdf') {
-                  preview = `📄 ${raw.attachment_name || 'PDF Document'}`;
-                } else if (raw.message_type === 'image') {
-                  preview = '📷 Photo';
-                } else {
-                  preview = `📎 ${raw.attachment_name || 'Attachment'}`;
-                }
-              } catch {}
-
-              // Upsert conversation & increment unread if not currently looking at this chat
-              const isLookingAtChat = currentActiveChatPeerId === senderId;
-              const unreadIncrement = isLookingAtChat ? 0 : 1;
-
-              await db.runAsync(
-                `INSERT OR REPLACE INTO chat_conversations (
-                  id, peerId, lastMessageId, lastMessagePreview, lastMessageTime,
-                  unreadCount, isMuted, updatedAt
-                ) VALUES (
-                  ?, ?, ?, ?, ?,
-                  COALESCE((SELECT unreadCount FROM chat_conversations WHERE id = ?), 0) + ?,
-                  0, ?
-                )`,
-                [conversationId, senderId, raw.id, preview.substring(0, 40), now, conversationId, unreadIncrement, now]
-              );
-
-              // Insert message into local SQLite
-              await db.runAsync(
-                `INSERT OR REPLACE INTO chat_messages (
-                  id, conversationId, senderId, recipientId, messageType,
-                  ciphertext, iv, hmac, decryptedText, attachmentPath,
-                  attachmentType, attachmentSize, attachmentName, duration,
-                  replyToId, status, createdAt
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'delivered', ?)`,
-                [
-                  raw.id,
-                  conversationId,
-                  senderId,
-                  userId,
-                  raw.message_type,
-                  raw.ciphertext,
-                  raw.iv,
-                  raw.hmac,
-                  preview,
-                  raw.attachment_path,
-                  raw.attachment_type,
-                  raw.attachment_size || 0,
-                  raw.attachment_name,
-                  raw.duration || 0,
-                  raw.reply_to_id,
-                  Number(raw.created_at || now),
-                ]
-              );
-
-              // Dispatch notification if not currently inside that specific chat
-              if (!isLookingAtChat) {
-                const senderProfile = await connectService.getProfile(senderId, userId);
-                const senderName = senderProfile?.displayName || 'Classmate';
-                await notificationService.scheduleLocalMessageNotification(
-                  senderName,
-                  preview,
-                  conversationId,
-                  senderId
-                );
-              }
-            } catch (e) {
-              console.warn('Realtime inbound message processing warning:', e);
-            }
-          }
-        )
         // Listen for new inbound follow requests
         .on(
           'postgres_changes',
@@ -246,7 +136,6 @@ export const presenceService = {
       appStateSubscription = null;
     }
     activeUserId = null;
-    currentActiveChatPeerId = null;
   },
 
   /**

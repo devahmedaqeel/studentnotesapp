@@ -3,7 +3,6 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { connectService } from '../services/connectService';
 import { connectSeedService } from '../services/connectSeedService';
-import { e2eeService } from '../services/e2eeService';
 import {
   StudentConnectProfile,
   StudentConnection,
@@ -23,10 +22,7 @@ export const useConnect = () => {
   const loadData = useCallback(async () => {
     if (!userId) return;
     try {
-      // 1. Initialize E2EE device identity
-      await e2eeService.initDeviceIdentity();
-
-      // 2. Fetch my connect profile
+      // 1. Fetch my connect profile
       let prof = await connectService.getProfile(userId);
       if (!prof) {
         // Auto-seed from auth profile if exists

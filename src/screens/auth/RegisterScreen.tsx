@@ -436,8 +436,8 @@ export const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                 <Text style={[styles.featureText, { color: theme.colors.text }]}>Notes & Docs</Text>
               </View>
               <View style={styles.featureItem}>
-                <Ionicons name="chatbubbles-outline" size={18} color="#00A884" />
-                <Text style={[styles.featureText, { color: theme.colors.text }]}>Student Chat</Text>
+                <Ionicons name="people-outline" size={18} color="#00A884" />
+                <Text style={[styles.featureText, { color: theme.colors.text }]}>Student Connect</Text>
               </View>
               <View style={styles.featureItem}>
                 <Ionicons name="calendar-outline" size={18} color="#F59E0B" />

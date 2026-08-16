@@ -113,7 +113,7 @@ export const StudentSearchScreen: React.FC<Props> = ({ navigation }) => {
           </View>
           <Text style={[styles.guideTitle, { color: theme.colors.text }]}>Discover Classmates</Text>
           <Text style={[styles.guideDesc, { color: theme.colors.textSecondary }]}>
-            Connect with university friends, exchange end-to-end encrypted notes, and share assignments safely.
+            Connect with university friends, view classmate profiles, and build your study network.
           </Text>
         </View>
       ) : (
@@ -126,7 +126,6 @@ export const StudentSearchScreen: React.FC<Props> = ({ navigation }) => {
               student={item}
               onPress={() => navigation.navigate('StudentProfile', { userId: item.id })}
               onFollowAction={() => handleFollow(item)}
-              onChatAction={() => navigation.navigate('Chat', { peerId: item.id })}
             />
           )}
         />

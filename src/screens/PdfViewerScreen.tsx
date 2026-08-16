@@ -154,27 +154,11 @@ export const PdfViewerScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const handleSharePdf = async () => {
     if (!pdf) return;
-    Alert.alert(
-      'Share PDF',
-      `Share "${pdf.title}" with classmates or other apps:`,
-      [
-        {
-          text: 'Share to Classmate (Chat)',
-          onPress: () => navigation.navigate('Inbox'),
-        },
-        {
-          text: 'Share via System',
-          onPress: async () => {
-            try {
-              await shareService.shareFile(pdf.filePath, pdf.title);
-            } catch (err: any) {
-              Alert.alert('Share Error', err.message || 'Could not share PDF.');
-            }
-          },
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
+    try {
+      await shareService.shareFile(pdf.filePath, pdf.title);
+    } catch (err: any) {
+      Alert.alert('Share Error', err.message || 'Could not share PDF.');
+    }
   };
 
   const handleGoToSubject = () => {

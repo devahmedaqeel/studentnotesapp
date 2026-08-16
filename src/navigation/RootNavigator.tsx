@@ -50,7 +50,6 @@ import { SaveLinkScreen } from '../screens/links/SaveLinkScreen';
 import { InboxScreen } from '../screens/connect/InboxScreen';
 import { StudentSearchScreen } from '../screens/connect/StudentSearchScreen';
 import { StudentProfileScreen } from '../screens/connect/StudentProfileScreen';
-import { ChatScreen } from '../screens/connect/ChatScreen';
 import { MyFriendsScreen } from '../screens/connect/MyFriendsScreen';
 import { FollowersScreen } from '../screens/connect/FollowersScreen';
 import { FollowingScreen } from '../screens/connect/FollowingScreen';
@@ -144,7 +143,6 @@ export const RootNavigator: React.FC = () => {
       <Stack.Screen name="Inbox" component={InboxScreen} />
       <Stack.Screen name="StudentSearch" component={StudentSearchScreen} />
       <Stack.Screen name="StudentProfile" component={StudentProfileScreen} />
-      <Stack.Screen name="Chat" component={ChatScreen} />
       <Stack.Screen name="MyFriends" component={MyFriendsScreen} />
       <Stack.Screen name="Followers" component={FollowersScreen} />
       <Stack.Screen name="Following" component={FollowingScreen} />

@@ -61,30 +61,12 @@ export const NoteViewerScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const handleShareNote = async () => {
     if (!note || !note.pages || note.pages.length === 0) return;
-    const noteTitle = note.title;
-    const notePages = note.pages;
-    Alert.alert(
-      'Share Note',
-      `Share "${noteTitle}" with classmates or other apps:`,
-      [
-        {
-          text: 'Share to Classmate (Chat)',
-          onPress: () => navigation.navigate('Inbox'),
-        },
-        {
-          text: 'Share via System',
-          onPress: async () => {
-            try {
-              const imageUris = notePages.map((p) => p.filePath);
-              await shareService.shareImages(imageUris, noteTitle);
-            } catch (err: any) {
-              Alert.alert('Share Error', err.message || 'Could not share note images.');
-            }
-          },
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
+    try {
+      const imageUris = note.pages.map((p) => p.filePath);
+      await shareService.shareImages(imageUris, note.title);
+    } catch (err: any) {
+      Alert.alert('Share Error', err.message || 'Could not share note images.');
+    }
   };
 
   const handleExportAsPdf = () => {

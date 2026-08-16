@@ -314,71 +314,8 @@ alter table public.student_connections enable row level security;
 create policy "Users manage involved connections" on public.student_connections
   for all using (auth.uid() = requester_id or auth.uid() = receiver_id);
 
--- 16. CHAT CONVERSATIONS & MEMBERS
-create table if not exists public.chat_conversations (
-  id text primary key,
-  created_at bigint not null,
-  updated_at bigint not null
-);
-
-create table if not exists public.chat_conversation_members (
-  conversation_id text references public.chat_conversations(id) on delete cascade not null,
-  user_id uuid references auth.users(id) on delete cascade not null,
-  muted_until bigint,
-  pinned_message_id text,
-  primary key (conversation_id, user_id)
-);
-
-alter table public.chat_conversations enable row level security;
-alter table public.chat_conversation_members enable row level security;
-
-create policy "Members manage conversations" on public.chat_conversations
-  for all using (exists (
-    select 1 from public.chat_conversation_members
-    where conversation_id = public.chat_conversations.id and user_id = auth.uid()
-  ));
-
-create policy "Authenticated users can create conversations" on public.chat_conversations
-  for insert with check (auth.role() = 'authenticated');
-
-create policy "Members view membership" on public.chat_conversation_members
-  for all using (user_id = auth.uid());
-
-create policy "Users can insert own conversation membership" on public.chat_conversation_members
-  for insert with check (user_id = auth.uid());
-
-create policy "Authenticated users can create conversation memberships" on public.chat_conversation_members
-  for insert with check (auth.role() = 'authenticated');
-
--- 17. CHAT MESSAGES TABLE (CIPHERTEXT ONLY)
-create table if not exists public.chat_messages (
-  id text primary key,
-  conversation_id text references public.chat_conversations(id) on delete cascade not null,
-  sender_id uuid references auth.users(id) on delete cascade not null,
-  recipient_id uuid references auth.users(id) on delete cascade not null,
-  message_type text not null,
-  ciphertext text not null,
-  iv text not null,
-  hmac text not null,
-  attachment_path text,
-  attachment_type text,
-  attachment_size bigint default 0,
-  attachment_name text,
-  duration int default 0,
-  reply_to_id text,
-  status text default 'sent',
-  is_deleted boolean default false,
-  created_at bigint not null,
-  edited_at bigint
-);
-
-alter table public.chat_messages enable row level security;
-
-create policy "Sender and recipient manage messages" on public.chat_messages
-  for all using (auth.uid() = sender_id or auth.uid() = recipient_id);
-
--- 18. 24-HOUR STUDENT STATUSES TABLE
-create table if not exists public.chat_statuses (
+-- 16. 24-HOUR STUDENT STATUSES TABLE
+create table if not exists public.student_statuses (
   id text primary key,
   user_id uuid references auth.users(id) on delete cascade not null,
   status_type text not null,
@@ -391,29 +328,29 @@ create table if not exists public.chat_statuses (
   expires_at bigint not null
 );
 
-create table if not exists public.chat_status_views (
-  status_id text references public.chat_statuses(id) on delete cascade not null,
+create table if not exists public.status_views (
+  status_id text references public.student_statuses(id) on delete cascade not null,
   viewer_id uuid references auth.users(id) on delete cascade not null,
   viewed_at bigint not null,
   primary key (status_id, viewer_id)
 );
 
-alter table public.chat_statuses enable row level security;
-alter table public.chat_status_views enable row level security;
+alter table public.student_statuses enable row level security;
+alter table public.status_views enable row level security;
 
-create policy "Active statuses visible to all authenticated students" on public.chat_statuses
+create policy "Active statuses visible to all authenticated students" on public.student_statuses
   for select using (auth.role() = 'authenticated' and expires_at > (extract(epoch from now()) * 1000));
 
-create policy "Users manage own status" on public.chat_statuses
+create policy "Users manage own status" on public.student_statuses
   for all using (auth.uid() = user_id);
 
-create policy "Users track status views" on public.chat_status_views
+create policy "Users track status views" on public.status_views
   for all using (auth.uid() = viewer_id or exists (
-    select 1 from public.chat_statuses where id = status_id and user_id = auth.uid()
+    select 1 from public.student_statuses where id = status_id and user_id = auth.uid()
   ));
 
--- 19. REPORTS & PRIVACY SETTINGS
-create table if not exists public.chat_reports (
+-- 17. REPORTS & PRIVACY SETTINGS
+create table if not exists public.student_reports (
   id text primary key,
   reporter_id uuid references auth.users(id) on delete cascade not null,
   reported_user_id uuid references auth.users(id) on delete cascade not null,
@@ -434,10 +371,10 @@ create table if not exists public.user_privacy_settings (
 
 alter table public.user_privacy_settings add column if not exists hide_followers_following boolean default false;
 
-alter table public.chat_reports enable row level security;
+alter table public.student_reports enable row level security;
 alter table public.user_privacy_settings enable row level security;
 
-create policy "Users create reports" on public.chat_reports
+create policy "Users create reports" on public.student_reports
   for insert with check (auth.uid() = reporter_id);
 
 create policy "Users manage privacy settings" on public.user_privacy_settings
@@ -465,11 +402,7 @@ create policy "Avatars isolation" on storage.objects
 create policy "Documents isolation" on storage.objects
   for all using (bucket_id = 'documents' and auth.uid()::text = (storage.foldername(name))[1]);
 
--- Storage policies for chat-attachments bucket
-create policy "Chat attachments isolation" on storage.objects
-  for all using (bucket_id = 'chat-attachments' and auth.role() = 'authenticated');
-
--- 20. STUDENT PROFILES (CANONICAL PUBLIC STUDENT CONNECT PROFILES)
+-- 18. STUDENT PROFILES (CANONICAL PUBLIC STUDENT CONNECT PROFILES)
 create table if not exists public.student_profiles (
   id uuid references auth.users(id) on delete cascade primary key,
   username text unique not null,

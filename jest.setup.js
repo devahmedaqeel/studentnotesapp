@@ -143,3 +143,6 @@ jest.mock('expo-camera', () => ({
   CameraView: () => null,
   useCameraPermissions: () => [{ granted: true }, jest.fn()],
 }));
+
+jest.setTimeout(15000);
+

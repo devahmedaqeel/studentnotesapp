@@ -1,11 +1,9 @@
 import { getDatabase } from '../database/database';
-import { e2eeService } from './e2eeService';
-import { chatService } from './chatService';
 import { generateId } from '../utils/id';
 
 export const connectSeedService = {
   /**
-   * Seeds demo students, mutual connections, sample chats, and 24-hour statuses for testing.
+   * Seeds demo students, mutual connections, and 24-hour statuses for testing.
    */
   async seedDemoData(myUserId: string = 'guest_user'): Promise<void> {
     const db = await getDatabase();
@@ -173,100 +171,7 @@ export const connectSeedService = {
       ['conn_zain_req', 'demo_user_zain', myUserId, now - oneHour * 2, now - oneHour * 2]
     );
 
-    // 3. Demo E2EE Messages with Sara Khan
-    const convSaraId = chatService.getConversationId(myUserId, 'demo_user_sara');
-    const secretSaraKey = await e2eeService.deriveConversationKey(myUserId, 'demo_user_sara');
-
-    const msg1Sara = 'Hey! Do you have the notes for Data Structures Lecture 4? 📚';
-    const enc1 = await e2eeService.encryptText(msg1Sara, secretSaraKey);
-
-    const msg2Sara = 'Yes, I have them! Sending you the PDF right now.';
-    const enc2 = await e2eeService.encryptText(msg2Sara, secretSaraKey);
-
-    const msg3Sara = 'Thanks a lot! Also check out the quiz deadline in the Student Diary ⏰';
-    const enc3 = await e2eeService.encryptText(msg3Sara, secretSaraKey);
-
-    // Upsert conversation FIRST
-    await db.runAsync(
-      `INSERT OR REPLACE INTO chat_conversations (
-        id, peerId, lastMessageId, lastMessagePreview, lastMessageTime, unreadCount, isMuted, updatedAt
-      ) VALUES (?, ?, ?, ?, ?, 1, 0, ?)`,
-      [
-        convSaraId,
-        'demo_user_sara',
-        'msg_demo_sara_3',
-        msg3Sara.substring(0, 40),
-        now - oneHour * 1,
-        now - oneHour * 1,
-      ]
-    );
-
-    await db.runAsync(
-      `INSERT OR REPLACE INTO chat_messages (
-        id, conversationId, senderId, recipientId, messageType,
-        ciphertext, iv, hmac, decryptedText, status, createdAt
-      ) VALUES (?, ?, ?, ?, 'text', ?, ?, ?, ?, 'read', ?)`,
-      ['msg_demo_sara_1', convSaraId, 'demo_user_sara', myUserId, enc1.ciphertext, enc1.iv, enc1.hmac, msg1Sara, now - oneHour * 3]
-    );
-
-    await db.runAsync(
-      `INSERT OR REPLACE INTO chat_messages (
-        id, conversationId, senderId, recipientId, messageType,
-        ciphertext, iv, hmac, decryptedText, status, createdAt
-      ) VALUES (?, ?, ?, ?, 'text', ?, ?, ?, ?, 'read', ?)`,
-      ['msg_demo_sara_2', convSaraId, myUserId, 'demo_user_sara', enc2.ciphertext, enc2.iv, enc2.hmac, msg2Sara, now - oneHour * 2]
-    );
-
-    await db.runAsync(
-      `INSERT OR REPLACE INTO chat_messages (
-        id, conversationId, senderId, recipientId, messageType,
-        ciphertext, iv, hmac, decryptedText, status, createdAt
-      ) VALUES (?, ?, ?, ?, 'text', ?, ?, ?, ?, 'read', ?)`,
-      ['msg_demo_sara_3', convSaraId, 'demo_user_sara', myUserId, enc3.ciphertext, enc3.iv, enc3.hmac, msg3Sara, now - oneHour * 1]
-    );
-
-    // 4. Demo E2EE Messages with Hamza Ali
-    const convHamzaId = chatService.getConversationId(myUserId, 'demo_user_hamza');
-    const secretHamzaKey = await e2eeService.deriveConversationKey(myUserId, 'demo_user_hamza');
-
-    const msg1Hamza = 'Assalam o Alaikum! Are you coming to university tomorrow for the class? 🎓';
-    const encHamza1 = await e2eeService.encryptText(msg1Hamza, secretHamzaKey);
-
-    const msg2Hamza = 'Wa Alaikum Assalam! Yes, our first lecture is at 09:00 AM.';
-    const encHamza2 = await e2eeService.encryptText(msg2Hamza, secretHamzaKey);
-
-    // Upsert conversation FIRST
-    await db.runAsync(
-      `INSERT OR REPLACE INTO chat_conversations (
-        id, peerId, lastMessageId, lastMessagePreview, lastMessageTime, unreadCount, isMuted, updatedAt
-      ) VALUES (?, ?, ?, ?, ?, 0, 0, ?)`,
-      [
-        convHamzaId,
-        'demo_user_hamza',
-        'msg_demo_hamza_2',
-        msg2Hamza.substring(0, 40),
-        now - oneHour * 4,
-        now - oneHour * 4,
-      ]
-    );
-
-    await db.runAsync(
-      `INSERT OR REPLACE INTO chat_messages (
-        id, conversationId, senderId, recipientId, messageType,
-        ciphertext, iv, hmac, decryptedText, status, createdAt
-      ) VALUES (?, ?, ?, ?, 'text', ?, ?, ?, ?, 'read', ?)`,
-      ['msg_demo_hamza_1', convHamzaId, 'demo_user_hamza', myUserId, encHamza1.ciphertext, encHamza1.iv, encHamza1.hmac, msg1Hamza, now - oneHour * 5]
-    );
-
-    await db.runAsync(
-      `INSERT OR REPLACE INTO chat_messages (
-        id, conversationId, senderId, recipientId, messageType,
-        ciphertext, iv, hmac, decryptedText, status, createdAt
-      ) VALUES (?, ?, ?, ?, 'text', ?, ?, ?, ?, 'read', ?)`,
-      ['msg_demo_hamza_2', convHamzaId, myUserId, 'demo_user_hamza', encHamza2.ciphertext, encHamza2.iv, encHamza2.hmac, msg2Hamza, now - oneHour * 4]
-    );
-
-    // 5. Demo 24-Hour Status Stories
+    // 3. Demo 24-Hour Status Stories
     await db.runAsync(
       `INSERT OR REPLACE INTO student_statuses (
         id, userId, username, displayName, avatarUrl,

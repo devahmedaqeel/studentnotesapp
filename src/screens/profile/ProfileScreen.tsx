@@ -34,7 +34,6 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
     friendsCount: 0,
     requestsCount: 0,
     sentCount: 0,
-    unreadCount: 0,
   });
   const [friendsList, setFriendsList] = useState<StudentConnectProfile[]>([]);
 
@@ -232,21 +231,6 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
             </View>
             <Text style={[styles.dashCount, { color: theme.colors.text }]}>{counts.sentCount}</Text>
             <Text style={[styles.dashLabel, { color: theme.colors.textSecondary }]}>Sent</Text>
-          </TouchableOpacity>
-
-          {/* Messages Unread Card */}
-          <TouchableOpacity
-            activeOpacity={0.85}
-            style={[styles.dashCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.borderLight }]}
-            onPress={() => navigation.navigate('Inbox')}
-          >
-            <View style={[styles.dashIconBox, { backgroundColor: 'rgba(236, 72, 153, 0.12)' }]}>
-              <Ionicons name="chatbubbles" size={20} color="#EC4899" />
-            </View>
-            <Text style={[styles.dashCount, { color: theme.colors.text }]}>
-              {counts.unreadCount > 0 ? `${counts.unreadCount} unread` : '0'}
-            </Text>
-            <Text style={[styles.dashLabel, { color: theme.colors.textSecondary }]}>Messages</Text>
           </TouchableOpacity>
         </View>
 

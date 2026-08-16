@@ -36,7 +36,6 @@ import { diaryRepository } from '../database/repositories/diaryRepository';
 import { timetableRepository } from '../database/repositories/timetableRepository';
 import { savedLinkRepository } from '../database/repositories/savedLinkRepository';
 import { timetableService } from '../services/timetableService';
-import { chatService } from '../services/chatService';
 import { UpcomingDeadlinesWidget } from '../components/diary/UpcomingDeadlinesWidget';
 import { TodayClassesWidget } from '../components/timetable/TodayClassesWidget';
 import { DiaryEvent } from '../types/diary';
@@ -62,7 +61,6 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const [currentClassMinutesLeft, setCurrentClassMinutesLeft] = useState(0);
   const [nextClass, setNextClass] = useState<TimetableClass | null>(null);
   const [nextClassMinutesUntil, setNextClassMinutesUntil] = useState(9999);
-  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
 
   const [showBackupPrompt, setShowBackupPrompt] = useState(false);
 
@@ -132,13 +130,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
         setNextClass(live.nextClass);
         setNextClassMinutesUntil(live.nextClassMinutesUntil);
       }).catch(() => {});
-      if (user?.id) {
-        chatService.getConversations(user.id).then((convs) => {
-          const total = convs.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
-          setUnreadMessageCount(total);
-        }).catch(() => {});
-      }
-    }, [refreshSubjects, refreshNotes, refreshPdfs, user?.id])
+    }, [refreshSubjects, refreshNotes, refreshPdfs])
   );
 
   useEffect(() => {
@@ -429,7 +421,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
           <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
         </TouchableOpacity>
 
-        {/* Student Connect / Inbox Entry Card */}
+        {/* Student Connect Entry Card */}
         <TouchableOpacity
           activeOpacity={0.88}
           style={[
@@ -443,27 +435,19 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
           onPress={() => (navigation.getParent() as any)?.navigate('Inbox')}
         >
           <View style={[styles.compressIconBox, { backgroundColor: '#DCFCE7' }]}>
-            <Ionicons name="chatbubbles" size={24} color="#10B981" />
+            <Ionicons name="people" size={24} color="#10B981" />
           </View>
           <View style={styles.compressTextWrapper}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={[styles.compressTitle, { color: theme.colors.text }]}>💬 Student Connect</Text>
-              {unreadMessageCount > 0 ? (
-                <View style={[styles.docCountPill, { backgroundColor: '#10B981' }]}>
-                  <Text style={[styles.docCountPillText, { color: '#FFFFFF' }]}>
-                    {unreadMessageCount} Unread
-                  </Text>
-                </View>
-              ) : (
-                <View style={[styles.docCountPill, { backgroundColor: 'rgba(16, 185, 129, 0.18)' }]}>
-                  <Text style={[styles.docCountPillText, { color: '#10B981' }]}>
-                    Inbox
-                  </Text>
-                </View>
-              )}
+              <Text style={[styles.compressTitle, { color: theme.colors.text }]}>🎓 Student Connect</Text>
+              <View style={[styles.docCountPill, { backgroundColor: 'rgba(16, 185, 129, 0.18)' }]}>
+                <Text style={[styles.docCountPillText, { color: '#10B981' }]}>
+                  Connect
+                </Text>
+              </View>
             </View>
             <Text style={[styles.compressSubtitle, { color: theme.colors.textSecondary }]}>
-              Connect with classmates, encrypted messaging, voice notes & 24h statuses
+              Connect with classmates, share 24h updates & grow your student network
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />

@@ -137,7 +137,7 @@ export const TermsPrivacyConsentScreen: React.FC<Props> = ({ navigation }) => {
                 Privacy Policy
               </Text>
               <Text style={[styles.cardDesc, { color: theme.colors.textSecondary }]}>
-                Offline-first storage, E2E chat encryption & data security principles
+                Offline-first storage, local SQLite persistence & data security principles
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />

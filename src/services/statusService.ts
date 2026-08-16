@@ -54,7 +54,7 @@ export const statusService = {
 
     // Sync to Supabase
     try {
-      await supabase.from('chat_statuses').insert({
+      await supabase.from('student_statuses').insert({
         id: statusId,
         user_id: profile.id,
         status_type: statusType,
@@ -201,7 +201,7 @@ export const statusService = {
     );
 
     try {
-      await supabase.from('chat_status_views').upsert(
+      await supabase.from('status_views').upsert(
         {
           status_id: statusId,
           viewer_id: viewerId,
@@ -275,7 +275,7 @@ export const statusService = {
     await db.runAsync(`DELETE FROM student_statuses WHERE id = ?`, [statusId]);
 
     try {
-      await supabase.from('chat_statuses').delete().eq('id', statusId);
+      await supabase.from('student_statuses').delete().eq('id', statusId);
     } catch {}
 
     return true;
