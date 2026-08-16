@@ -10,6 +10,7 @@ import {
   Alert,
   ActivityIndicator,
   FlatList,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -165,6 +166,8 @@ export const ImageCompressionScreen: React.FC<Props> = ({ navigation, route }) =
     }
   };
 
+  const [savingToGallery, setSavingToGallery] = useState(false);
+
   const handleShareResult = async () => {
     const uriToShare = compressedResults?.[activeImageIndex]?.uri;
     if (!uriToShare) return;
@@ -176,15 +179,93 @@ export const ImageCompressionScreen: React.FC<Props> = ({ navigation, route }) =
     }
   };
 
-  const handleExportResult = async () => {
-    const uriToExport = compressedResults?.[activeImageIndex]?.uri;
-    if (!uriToExport) return;
+  const handleSaveToGallery = async () => {
+    if (!compressedResults || compressedResults.length === 0) return;
+
+    if (compressedResults.length > 1) {
+      Alert.alert(
+        'Save Compressed Images',
+        `Would you like to save the active image or all ${compressedResults.length} compressed images to your device Gallery?`,
+        [
+          {
+            text: 'Active Image',
+            onPress: async () => {
+              await executeSingleSave(compressedResults[activeImageIndex].uri);
+            },
+          },
+          {
+            text: `All ${compressedResults.length} Images`,
+            onPress: async () => {
+              await executeBatchSave(compressedResults.map((r) => r.uri));
+            },
+          },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
+    } else {
+      await executeSingleSave(compressedResults[0].uri);
+    }
+  };
+
+  const executeSingleSave = async (uri: string) => {
     try {
-      const filename = `Compressed_${Date.now()}.${format}`;
-      const savedPath = await fileStorageService.saveToAppStorage(uriToExport, filename);
-      Alert.alert('Save Successful', `Saved compressed image to:\n${savedPath}`);
+      setSavingToGallery(true);
+      const ext = format === 'png' ? 'png' : format === 'webp' ? 'webp' : 'jpg';
+      const filename = `StudentNotes_Compressed_${Date.now()}.${ext}`;
+      const res = await imageCompressionService.saveImageToGallery(uri, filename);
+
+      if (res.success) {
+        Alert.alert('Saved to Gallery', 'Image saved successfully to your Gallery.');
+      } else if (res.isPermissionDenied) {
+        if (!res.canAskAgain) {
+          Alert.alert(
+            'Permission Required',
+            'Permission is required to save images to your device Gallery. Please enable Photos/Media permission in device Settings.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Open Settings', onPress: () => Linking.openSettings() },
+            ]
+          );
+        } else {
+          Alert.alert('Permission Required', 'Permission is required to save images to your device Gallery.');
+        }
+      } else {
+        Alert.alert('Save Failed', res.error || 'Unable to save image. Please try again.');
+      }
     } catch (err: any) {
-      Alert.alert('Save Error', err.message || 'Could not save compressed file.');
+      Alert.alert('Save Failed', err.message || 'Unable to save image. Please try again.');
+    } finally {
+      setSavingToGallery(false);
+    }
+  };
+
+  const executeBatchSave = async (uris: string[]) => {
+    try {
+      setSavingToGallery(true);
+      const res = await imageCompressionService.saveMultipleImagesToGallery(uris, format);
+
+      if (res.success) {
+        Alert.alert('Saved to Gallery', `All ${res.savedCount || uris.length} images saved successfully to your Gallery.`);
+      } else if (res.isPermissionDenied) {
+        if (!res.canAskAgain) {
+          Alert.alert(
+            'Permission Required',
+            'Permission is required to save images to your device Gallery. Please enable Photos/Media permission in device Settings.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Open Settings', onPress: () => Linking.openSettings() },
+            ]
+          );
+        } else {
+          Alert.alert('Permission Required', 'Permission is required to save images to your device Gallery.');
+        }
+      } else {
+        Alert.alert('Save Failed', res.error || 'Unable to save images. Please try again.');
+      }
+    } catch (err: any) {
+      Alert.alert('Save Failed', err.message || 'Unable to save images. Please try again.');
+    } finally {
+      setSavingToGallery(false);
     }
   };
 
@@ -389,8 +470,9 @@ export const ImageCompressionScreen: React.FC<Props> = ({ navigation, route }) =
             {compressedResults && (
               <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
                 <AppButton
-                  title="Save"
-                  onPress={handleExportResult}
+                  title={savingToGallery ? 'Saving...' : 'Save to Gallery'}
+                  onPress={handleSaveToGallery}
+                  loading={savingToGallery}
                   variant="secondary"
                   icon="download-outline"
                   style={{ flex: 1 }}

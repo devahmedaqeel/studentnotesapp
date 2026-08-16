@@ -59,4 +59,54 @@ jest.mock('expo-file-system/legacy', () => ({
   getInfoAsync: jest.fn(() => Promise.resolve({ exists: true, size: 1024 })),
   writeAsStringAsync: jest.fn(() => Promise.resolve()),
   readAsStringAsync: jest.fn(() => Promise.resolve('mock_content')),
+  copyAsync: jest.fn(() => Promise.resolve()),
+  deleteAsync: jest.fn(() => Promise.resolve()),
+}));
+
+jest.mock('react-native', () => ({
+  Platform: { OS: 'android', select: (obj) => obj.android || obj.default },
+  Image: {
+    getSize: jest.fn((uri, success) => success(1200, 1600)),
+  },
+  Linking: {
+    openSettings: jest.fn(() => Promise.resolve()),
+  },
+  Alert: {
+    alert: jest.fn(),
+  },
+  StyleSheet: {
+    create: (styles) => styles,
+  },
+  Appearance: {
+    getColorScheme: jest.fn(() => 'light'),
+    addChangeListener: jest.fn(() => ({ remove: jest.fn() })),
+  },
+  AppState: {
+    addEventListener: jest.fn(() => ({ remove: jest.fn() })),
+  },
+}));
+
+jest.mock('expo-image-picker', () => ({
+  requestMediaLibraryPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'granted', granted: true })),
+  requestCameraPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'granted', granted: true })),
+  launchImageLibraryAsync: jest.fn(() => Promise.resolve({ canceled: false, assets: [{ uri: 'file:///mock/image.jpg' }] })),
+  launchCameraAsync: jest.fn(() => Promise.resolve({ canceled: false, assets: [{ uri: 'file:///mock/camera.jpg' }] })),
+}));
+
+jest.mock('expo-image-manipulator', () => ({
+  manipulateAsync: jest.fn(() => Promise.resolve({ uri: 'file:///mock/manipulated.jpg', width: 1200, height: 1600 })),
+  SaveFormat: {
+    JPEG: 'jpeg',
+    PNG: 'png',
+    WEBP: 'webp',
+  },
+}));
+
+jest.mock('expo-media-library', () => ({
+  getPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'granted', granted: true, canAskAgain: true })),
+  requestPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'granted', granted: true, canAskAgain: true })),
+  createAssetAsync: jest.fn((uri) => Promise.resolve({ id: 'mock-asset-123', uri })),
+  getAlbumAsync: jest.fn(() => Promise.resolve(null)),
+  createAlbumAsync: jest.fn(() => Promise.resolve({ id: 'mock-album-123' })),
+  addAssetsToAlbumAsync: jest.fn(() => Promise.resolve(true)),
 }));

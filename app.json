@@ -17,7 +17,8 @@
       "bundleIdentifier": "com.studentnotes.app",
       "infoPlist": {
         "NSCameraUsageDescription": "StudentNotes needs camera access to scan your handwritten and printed notes.",
-        "NSPhotoLibraryUsageDescription": "StudentNotes needs access to your photos to import document images."
+        "NSPhotoLibraryUsageDescription": "StudentNotes needs access to your photos to import document images.",
+        "NSPhotoLibraryAddUsageDescription": "StudentNotes needs access to your gallery to save compressed study images."
       }
     },
     "android": {
@@ -32,7 +33,8 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.POST_NOTIFICATIONS"
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.READ_MEDIA_IMAGES"
       ]
     },
     "plugins": [
@@ -46,6 +48,13 @@
         "expo-image-picker",
         {
           "photosPermission": "StudentNotes needs access to your photos to import document images."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "StudentNotes needs access to your gallery to save compressed study images.",
+          "savePhotosPermission": "StudentNotes needs permission to save compressed images to your gallery."
         }
       ],
       "expo-sqlite",

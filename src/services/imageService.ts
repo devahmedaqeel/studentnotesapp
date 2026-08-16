@@ -141,4 +141,12 @@ export const imageService = {
       compressedSize,
     };
   },
+
+  /**
+   * Saves an image directly to the user's mobile Gallery / Photos library.
+   */
+  async saveToGallery(imageUri: string, suggestedFilename?: string): Promise<{ success: boolean; error?: string }> {
+    const { imageCompressionService } = require('./imageCompressionService');
+    return await imageCompressionService.saveImageToGallery(imageUri, suggestedFilename);
+  },
 };

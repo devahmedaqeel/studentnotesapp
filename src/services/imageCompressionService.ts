@@ -1,5 +1,6 @@
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as MediaLibrary from 'expo-media-library';
 import { Image } from 'react-native';
 import {
   ImageCompressionConfig,
@@ -221,6 +222,180 @@ export const imageCompressionService = {
       } catch {
         // Ignore non-fatal cleanup errors
       }
+    }
+  },
+
+  /**
+   * Saves an image directly to the device's public Gallery / Photos library.
+   * Handles Android / iOS permissions, verifies file existence, creates asset,
+   * and places it into the 'StudentNotes' album.
+   */
+  async saveImageToGallery(
+    imageUri: string,
+    suggestedFilename?: string
+  ): Promise<{ success: boolean; assetId?: string; error?: string; isPermissionDenied?: boolean; canAskAgain?: boolean }> {
+    try {
+      if (!imageUri) {
+        return { success: false, error: 'No image provided to save.' };
+      }
+
+      // 1. Verify file exists on disk
+      const fileInfo = await FileSystem.getInfoAsync(imageUri);
+      if (!fileInfo.exists) {
+        return { success: false, error: 'The compressed image file could not be found.' };
+      }
+
+      // 2. Check and request Media Library permissions
+      const permCheck = await MediaLibrary.getPermissionsAsync();
+      let hasPermission = permCheck.granted;
+      let canAskAgain = permCheck.canAskAgain;
+
+      if (!hasPermission) {
+        const permReq = await MediaLibrary.requestPermissionsAsync();
+        hasPermission = permReq.granted;
+        canAskAgain = permReq.canAskAgain;
+      }
+
+      if (!hasPermission) {
+        return {
+          success: false,
+          isPermissionDenied: true,
+          canAskAgain,
+          error: canAskAgain
+            ? 'Permission is required to save images to your device Gallery.'
+            : 'Permission permanently denied. Please enable Photos/Media permission in device Settings to save images.',
+        };
+      }
+
+      // 3. Ensure file has a proper extension before saving to media library
+      let targetUri = imageUri;
+      if (suggestedFilename) {
+        const ext = suggestedFilename.split('.').pop() || 'jpg';
+        const tempCopyUri = `${FileSystem.cacheDirectory}saved_${Date.now()}_${Math.floor(Math.random() * 1000)}.${ext}`;
+        try {
+          await FileSystem.copyAsync({
+            from: imageUri,
+            to: tempCopyUri,
+          });
+          targetUri = tempCopyUri;
+        } catch {
+          targetUri = imageUri;
+        }
+      }
+
+      // 4. Create Asset in device Media Library (Gallery)
+      const asset = await MediaLibrary.createAssetAsync(targetUri);
+      if (!asset) {
+        return { success: false, error: 'Unable to save image to Gallery.' };
+      }
+
+      // 5. Place in 'StudentNotes' album in Gallery for easy organization
+      try {
+        const album = await MediaLibrary.getAlbumAsync('StudentNotes');
+        if (album === null) {
+          await MediaLibrary.createAlbumAsync('StudentNotes', asset, false);
+        } else {
+          await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
+        }
+      } catch (albumErr) {
+        // Asset is already saved in main gallery even if album creation fails
+        console.warn('Album grouping notice:', albumErr);
+      }
+
+      return {
+        success: true,
+        assetId: asset.id,
+      };
+    } catch (err: any) {
+      console.error('Gallery save error:', err);
+      return {
+        success: false,
+        error: err.message || 'Unable to save image. Please try again.',
+      };
+    }
+  },
+
+  /**
+   * Saves a batch of images to the device Gallery / Photos.
+   */
+  async saveMultipleImagesToGallery(
+    imageUris: string[],
+    baseFormat: string = 'jpeg'
+  ): Promise<{ success: boolean; savedCount?: number; error?: string; isPermissionDenied?: boolean; canAskAgain?: boolean }> {
+    try {
+      if (!imageUris || imageUris.length === 0) {
+        return { success: false, error: 'No images to save.' };
+      }
+
+      const permCheck = await MediaLibrary.getPermissionsAsync();
+      let hasPermission = permCheck.granted;
+      let canAskAgain = permCheck.canAskAgain;
+
+      if (!hasPermission) {
+        const permReq = await MediaLibrary.requestPermissionsAsync();
+        hasPermission = permReq.granted;
+        canAskAgain = permReq.canAskAgain;
+      }
+
+      if (!hasPermission) {
+        return {
+          success: false,
+          isPermissionDenied: true,
+          canAskAgain,
+          error: canAskAgain
+            ? 'Permission is required to save images to your device Gallery.'
+            : 'Permission permanently denied. Please enable Photos/Media permission in device Settings to save images.',
+        };
+      }
+
+      const assets: MediaLibrary.Asset[] = [];
+      for (let i = 0; i < imageUris.length; i++) {
+        const uri = imageUris[i];
+        const fileInfo = await FileSystem.getInfoAsync(uri);
+        if (fileInfo.exists) {
+          const ext = baseFormat === 'png' ? 'png' : baseFormat === 'webp' ? 'webp' : 'jpg';
+          const tempCopyUri = `${FileSystem.cacheDirectory}batch_${Date.now()}_${i}.${ext}`;
+          try {
+            await FileSystem.copyAsync({ from: uri, to: tempCopyUri });
+            const asset = await MediaLibrary.createAssetAsync(tempCopyUri);
+            if (asset) assets.push(asset);
+          } catch {
+            const asset = await MediaLibrary.createAssetAsync(uri);
+            if (asset) assets.push(asset);
+          }
+        }
+      }
+
+      if (assets.length === 0) {
+        return { success: false, error: 'Failed to create gallery assets for compressed images.' };
+      }
+
+      try {
+        const album = await MediaLibrary.getAlbumAsync('StudentNotes');
+        if (album === null) {
+          await MediaLibrary.createAlbumAsync('StudentNotes', assets[0], false);
+          if (assets.length > 1) {
+            const newAlbum = await MediaLibrary.getAlbumAsync('StudentNotes');
+            if (newAlbum) {
+              await MediaLibrary.addAssetsToAlbumAsync(assets.slice(1), newAlbum, false);
+            }
+          }
+        } else {
+          await MediaLibrary.addAssetsToAlbumAsync(assets, album, false);
+        }
+      } catch (albumErr) {
+        console.warn('Batch album grouping notice:', albumErr);
+      }
+
+      return {
+        success: true,
+        savedCount: assets.length,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        error: err.message || 'Unable to save images to Gallery.',
+      };
     }
   },
 };
