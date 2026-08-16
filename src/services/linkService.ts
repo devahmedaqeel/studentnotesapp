@@ -182,6 +182,7 @@ export interface CleanUrlResult {
   originalUrl: string;
   cleanedUrl: string;
   domain: string;
+  extractedTitle?: string;
   removedParams: string[];
   isValid: boolean;
 }
@@ -197,7 +198,77 @@ export interface LinkMetadataResult {
 
 export const linkService = {
   /**
-   * Cleans a URL by safely stripping tracking parameters while strictly preserving functional parameters.
+   * Extracts clean URL and accompanying title from arbitrary pasted text (e.g. shared from WhatsApp, Browser, Google, YouTube).
+   */
+  extractUrlAndTitle(rawText: string): { url: string; title: string } {
+    if (!rawText) return { url: '', title: '' };
+
+    let text = rawText.trim();
+    let foundUrl = '';
+    let extractedTitle = '';
+
+    // Check for markdown link [Title](https://...)
+    const mdMatch = text.match(/\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/i);
+    if (mdMatch) {
+      return {
+        url: mdMatch[2].trim(),
+        title: mdMatch[1].trim(),
+      };
+    }
+
+    // Match any http:// or https:// URL in text
+    const httpMatch = text.match(/(https?:\/\/[^\s]+)/i);
+    if (httpMatch) {
+      foundUrl = httpMatch[1];
+      // Remaining text before or after URL is candidate title
+      const before = text.substring(0, httpMatch.index).trim();
+      const after = text.substring((httpMatch.index || 0) + foundUrl.length).trim();
+      extractedTitle = [before, after].filter(Boolean).join(' ').trim();
+    } else {
+      // Check for bare www. or domain.com pattern
+      const wwwMatch = text.match(/(www\.[^\s]+)/i);
+      if (wwwMatch) {
+        foundUrl = `https://${wwwMatch[1]}`;
+        const before = text.substring(0, wwwMatch.index).trim();
+        const after = text.substring((wwwMatch.index || 0) + wwwMatch[1].length).trim();
+        extractedTitle = [before, after].filter(Boolean).join(' ').trim();
+      } else {
+        // Check if entire text is a bare domain with path e.g. github.com/user/repo
+        const domainMatch = text.match(/^([a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?)$/i);
+        if (domainMatch) {
+          foundUrl = `https://${domainMatch[1]}`;
+          extractedTitle = '';
+        } else {
+          // Check if text has a domain inside
+          const insideDomainMatch = text.match(/([a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?)/i);
+          if (insideDomainMatch && (insideDomainMatch[1].includes('.com') || insideDomainMatch[1].includes('.org') || insideDomainMatch[1].includes('.net') || insideDomainMatch[1].includes('.io') || insideDomainMatch[1].includes('.edu') || insideDomainMatch[1].includes('.gov') || insideDomainMatch[1].includes('.app') || insideDomainMatch[1].includes('.dev'))) {
+            foundUrl = `https://${insideDomainMatch[1]}`;
+            const before = text.substring(0, insideDomainMatch.index).trim();
+            const after = text.substring((insideDomainMatch.index || 0) + insideDomainMatch[1].length).trim();
+            extractedTitle = [before, after].filter(Boolean).join(' ').trim();
+          } else {
+            foundUrl = text;
+          }
+        }
+      }
+    }
+
+    // Clean trailing punctuation attached to URL from natural language (e.g. "https://site.com).", "https://site.com,")
+    foundUrl = foundUrl.replace(/[.,;:\)\]\>"\']+$/g, '');
+
+    // Clean up title (remove trailing separators like " - ", " : ", " | ")
+    extractedTitle = extractedTitle
+      .replace(/^[\s\-:|—–]+|[\s\-:|—–]+$/g, '')
+      .trim();
+
+    return {
+      url: foundUrl,
+      title: extractedTitle,
+    };
+  },
+
+  /**
+   * Cleans a URL by safely extracting the URL from mixed text and stripping tracking parameters while strictly preserving functional parameters.
    */
   cleanUrl(rawUrl: string): CleanUrlResult {
     let input = (rawUrl || '').trim();
@@ -211,14 +282,31 @@ export const linkService = {
       };
     }
 
+    // Extract actual URL and potential prefilled title if user pasted a share text
+    const { url: extractedUrl, title: extractedTitle } = this.extractUrlAndTitle(input);
+    let urlToParse = extractedUrl || input;
+
     // Prepend https:// if protocol is missing
-    if (!input.startsWith('http://') && !input.startsWith('https://')) {
-      input = `https://${input}`;
+    if (!urlToParse.startsWith('http://') && !urlToParse.startsWith('https://')) {
+      urlToParse = `https://${urlToParse}`;
     }
 
     try {
-      const urlObj = new URL(input);
+      const urlObj = new URL(urlToParse);
       const domain = urlObj.hostname.replace(/^www\./i, '').toLowerCase();
+
+      // Validate that hostname has a valid dot domain (e.g. google.com, not just random words)
+      if (!domain.includes('.') || domain.length < 3) {
+        return {
+          originalUrl: input,
+          cleanedUrl: '',
+          domain: '',
+          extractedTitle,
+          removedParams: [],
+          isValid: false,
+        };
+      }
+
       const removedParams: string[] = [];
 
       // Check each search param
@@ -268,14 +356,16 @@ export const linkService = {
         originalUrl: input,
         cleanedUrl: cleaned,
         domain,
+        extractedTitle: extractedTitle || undefined,
         removedParams,
         isValid: true,
       };
     } catch {
       return {
         originalUrl: input,
-        cleanedUrl: input,
+        cleanedUrl: '',
         domain: '',
+        extractedTitle,
         removedParams: [],
         isValid: false,
       };

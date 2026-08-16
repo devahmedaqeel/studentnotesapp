@@ -48,6 +48,34 @@ describe('Smart Saved Links & Resource Manager Unit Tests', () => {
       expect(res.domain).toBe('github.com');
     });
 
+    test('extracts clean URL and title from natural shared text with title and link', () => {
+      const input = 'Ahmed Aqeel | AI-Powered Full Stack App Expert https://share.google/ls25w648faOReU0sK';
+      const res = linkService.cleanUrl(input);
+
+      expect(res.isValid).toBe(true);
+      expect(res.cleanedUrl).toBe('https://share.google/ls25w648faOReU0sK');
+      expect(res.domain).toBe('share.google');
+      expect(res.extractedTitle).toBe('Ahmed Aqeel | AI-Powered Full Stack App Expert');
+    });
+
+    test('extracts clean URL from WhatsApp/Telegram message with trailing punctuation', () => {
+      const input = 'Check out this awesome React guide: https://react.dev/learn). Highly recommended!';
+      const res = linkService.cleanUrl(input);
+
+      expect(res.isValid).toBe(true);
+      expect(res.cleanedUrl).toBe('https://react.dev/learn');
+      expect(res.domain).toBe('react.dev');
+    });
+
+    test('extracts URL from markdown link format [Title](url)', () => {
+      const input = '[Student Notes App](https://github.com/devahmedaqeel/studentnotesapp)';
+      const res = linkService.cleanUrl(input);
+
+      expect(res.isValid).toBe(true);
+      expect(res.cleanedUrl).toBe('https://github.com/devahmedaqeel/studentnotesapp');
+      expect(res.extractedTitle).toBe('Student Notes App');
+    });
+
     test('handles empty and invalid input safely without crashing', () => {
       const res1 = linkService.cleanUrl('');
       expect(res1.isValid).toBe(false);

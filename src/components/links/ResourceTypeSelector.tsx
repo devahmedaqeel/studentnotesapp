@@ -19,19 +19,19 @@ interface ResourceTypeSelectorProps {
   onChangeCustomType?: (custom: string) => void;
 }
 
-const ALL_TYPES: ResourceType[] = [
-  'article',
+const PRIMARY_TYPES: ResourceType[] = [
   'website',
   'youtube',
-  'docs',
-  'paper',
-  'pdf',
+  'article',
   'github',
+  'pdf',
+  'docs',
   'course',
+  'paper',
   'tool',
   'ai_tool',
-  'university',
   'study_material',
+  'university',
   'blog',
   'reference',
   'other',
@@ -47,15 +47,16 @@ export const ResourceTypeSelector: React.FC<ResourceTypeSelectorProps> = ({
 
   return (
     <View style={styles.container}>
-      <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-        What is this resource?
-      </Text>
-      <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary }]}>
-        Select the resource type so you can filter and organize it easily
+      <Text style={[styles.label, { color: theme.colors.text }]}>
+        Resource Type
       </Text>
 
-      <View style={styles.chipGrid}>
-        {ALL_TYPES.map((type) => {
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {PRIMARY_TYPES.map((type) => {
           const conf = RESOURCE_TYPE_CONFIGS[type];
           const isSelected = selectedType === type;
 
@@ -67,14 +68,14 @@ export const ResourceTypeSelector: React.FC<ResourceTypeSelectorProps> = ({
               style={[
                 styles.typeChip,
                 {
-                  backgroundColor: isSelected ? conf.color : theme.colors.card,
+                  backgroundColor: isSelected ? conf.color : theme.colors.background,
                   borderColor: isSelected ? conf.color : theme.colors.border,
                 },
               ]}
             >
               <Ionicons
                 name={conf.icon as any}
-                size={16}
+                size={15}
                 color={isSelected ? '#FFFFFF' : conf.color}
                 style={{ marginRight: 6 }}
               />
@@ -83,7 +84,7 @@ export const ResourceTypeSelector: React.FC<ResourceTypeSelectorProps> = ({
                   styles.chipText,
                   {
                     color: isSelected ? '#FFFFFF' : theme.colors.text,
-                    fontWeight: isSelected ? '700' : '500',
+                    fontWeight: isSelected ? '700' : '600',
                   },
                 ]}
               >
@@ -92,23 +93,20 @@ export const ResourceTypeSelector: React.FC<ResourceTypeSelectorProps> = ({
             </TouchableOpacity>
           );
         })}
-      </View>
+      </ScrollView>
 
       {/* If "Other" is selected, allow custom type entry */}
       {selectedType === 'other' && (
         <View style={styles.customTypeContainer}>
-          <Text style={[styles.customTypeLabel, { color: theme.colors.textSecondary }]}>
-            Specify Custom Resource Type:
-          </Text>
           <TextInput
             value={customType}
             onChangeText={onChangeCustomType}
-            placeholder="e.g. Podcast, Slides, Dataset, Cheatsheet..."
+            placeholder="Specify custom type (e.g. Slides, Podcast, Cheatsheet)..."
             placeholderTextColor={theme.colors.textMuted}
             style={[
               styles.customTypeInput,
               {
-                backgroundColor: theme.colors.card,
+                backgroundColor: theme.colors.background,
                 borderColor: theme.colors.primary,
                 color: theme.colors.text,
               },
@@ -122,46 +120,36 @@ export const ResourceTypeSelector: React.FC<ResourceTypeSelectorProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    marginVertical: 10,
+    marginVertical: 4,
   },
-  sectionTitle: {
-    fontSize: 15,
+  label: {
+    fontSize: 14,
     fontWeight: '700',
-    marginBottom: 4,
+    marginBottom: 8,
   },
-  sectionSubtitle: {
-    fontSize: 12,
-    marginBottom: 12,
-  },
-  chipGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  scrollContent: {
     gap: 8,
+    paddingVertical: 2,
   },
   typeChip: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
     borderWidth: 1,
   },
   chipText: {
-    fontSize: 13,
+    fontSize: 12.5,
   },
   customTypeContainer: {
-    marginTop: 12,
-  },
-  customTypeLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 6,
+    marginTop: 10,
   },
   customTypeInput: {
-    height: 44,
+    height: 42,
     borderRadius: 10,
     borderWidth: 1.5,
     paddingHorizontal: 12,
-    fontSize: 14,
+    fontSize: 13.5,
   },
 });
