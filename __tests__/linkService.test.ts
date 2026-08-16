@@ -1,9 +1,9 @@
-import { linkService, decodeHtmlEntities, RESOURCE_TYPE_CONFIGS } from '../src/services/linkService';
+import { linkService, decodeHtmlEntities, RESOURCE_TYPE_CONFIGS, TRACKING_QUERY_PARAMS, FUNCTIONAL_QUERY_PARAMS } from '../src/services/linkService';
 
 describe('Smart Saved Links & Resource Manager Unit Tests', () => {
   describe('Smart URL Cleaner & Tracker Stripper', () => {
     test('removes standard Google Analytics UTM tracking parameters', () => {
-      const url = 'https://example.com/article?utm_source=google&utm_medium=cpc&utm_campaign=summer_sale';
+      const url = 'https://example.com/article?utm_source=google&utm_medium=cpc&utm_campaign=summer_sale&utm_term=react&utm_content=logolink';
       const res = linkService.cleanUrl(url);
 
       expect(res.isValid).toBe(true);
@@ -11,32 +11,57 @@ describe('Smart Saved Links & Resource Manager Unit Tests', () => {
       expect(res.removedParams).toContain('utm_source');
       expect(res.removedParams).toContain('utm_medium');
       expect(res.removedParams).toContain('utm_campaign');
+      expect(res.removedParams).toContain('utm_term');
+      expect(res.removedParams).toContain('utm_content');
+      expect(res.hasTrackingParams).toBe(true);
     });
 
-    test('removes social media ad tracking (fbclid, gclid, msclkid, igshid)', () => {
-      const url = 'https://react.dev/blog/react-19?fbclid=IwAR123456&gclid=EAIaIQobChMI&msclkid=abcd987';
+    test('removes social media ad tracking (fbclid, gclid, msclkid, igshid, ttclid, yclid, twclid)', () => {
+      const url = 'https://react.dev/blog/react-19?fbclid=IwAR123456&gclid=EAIaIQobChMI&msclkid=abcd987&igshid=xyz123&ttclid=tt456';
       const res = linkService.cleanUrl(url);
 
       expect(res.cleanedUrl).toBe('https://react.dev/blog/react-19');
       expect(res.removedParams).toContain('fbclid');
       expect(res.removedParams).toContain('gclid');
       expect(res.removedParams).toContain('msclkid');
+      expect(res.removedParams).toContain('igshid');
+      expect(res.removedParams).toContain('ttclid');
     });
 
-    test('STRICTLY PRESERVES functional query parameters (id, page, article, video, doc)', () => {
-      const url = 'https://example.com/lecture?id=123&page=5&article=456&utm_source=twitter';
+    test('STRICTLY PRESERVES functional query parameters (id, page, article, doc, query, search)', () => {
+      const url = 'https://example.com/lecture?id=123&page=5&article=456&search=calculus&utm_source=twitter';
       const res = linkService.cleanUrl(url);
 
-      expect(res.cleanedUrl).toBe('https://example.com/lecture?id=123&page=5&article=456');
+      expect(res.cleanedUrl).toBe('https://example.com/lecture?id=123&page=5&article=456&search=calculus');
       expect(res.removedParams).toEqual(['utm_source']);
+      expect(res.preservedParams.some((p) => p.startsWith('id='))).toBe(true);
+      expect(res.preservedParams.some((p) => p.startsWith('page='))).toBe(true);
     });
 
-    test('preserves YouTube video ID (v parameter) while removing share tracking (si)', () => {
-      const url = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ&si=tracking123&feature=share';
+    test('preserves YouTube video ID (v parameter) and timestamp (t parameter) while removing share tracking (si, feature=share)', () => {
+      const url = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=42s&si=tracking123&feature=share';
       const res = linkService.cleanUrl(url);
 
-      expect(res.cleanedUrl).toBe('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+      expect(res.cleanedUrl).toBe('https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=42s');
       expect(res.removedParams).toContain('si');
+      expect(res.removedParams).toContain('feature');
+    });
+
+    test('preserves unknown custom query parameters by default', () => {
+      const url = 'https://api.example.com/v1/data?custom_filter=enabled&dataset_version=2&utm_medium=email';
+      const res = linkService.cleanUrl(url);
+
+      expect(res.cleanedUrl).toBe('https://api.example.com/v1/data?custom_filter=enabled&dataset_version=2');
+      expect(res.removedParams).toEqual(['utm_medium']);
+    });
+
+    test('supports Keep Original mode by disabling removeTracking option', () => {
+      const url = 'https://example.com/item?id=99&utm_source=newsletter&fbclid=abc';
+      const res = linkService.cleanUrl(url, { removeTracking: false });
+
+      expect(res.cleanedUrl).toBe('https://example.com/item?id=99&utm_source=newsletter&fbclid=abc');
+      expect(res.removedParams).toContain('utm_source');
+      expect(res.removedParams).toContain('fbclid');
     });
 
     test('prepends https:// when user enters a bare domain or path', () => {
@@ -83,6 +108,14 @@ describe('Smart Saved Links & Resource Manager Unit Tests', () => {
 
       const res2 = linkService.cleanUrl('   ');
       expect(res2.isValid).toBe(false);
+
+      const res3 = linkService.cleanUrl('not a valid url at all');
+      expect(res3.isValid).toBe(false);
+    });
+
+    test('normalizes URL display format (removes protocol and www prefixes)', () => {
+      const res = linkService.cleanUrl('https://www.coursera.org/learn/algorithms');
+      expect(res.displayUrl).toBe('coursera.org/learn/algorithms');
     });
   });
 

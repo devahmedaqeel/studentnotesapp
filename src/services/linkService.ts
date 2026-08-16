@@ -38,7 +38,7 @@ export const RESOURCE_TYPE_CONFIGS: Record<ResourceType, ResourceTypeConfig> = {
     label: 'Documentation',
     icon: 'book-outline',
     color: '#10B981',
-    bgColor: 'rgba(16, 185, 129, 0.14)',
+    bgColor: 'rgba(10, 185, 129, 0.14)',
     description: 'Technical API, framework, or language docs',
   },
   paper: {
@@ -126,7 +126,8 @@ export const RESOURCE_TYPE_CONFIGS: Record<ResourceType, ResourceTypeConfig> = {
 /**
  * List of known tracking parameter keys that are safe to remove without breaking destination functionality.
  */
-const TRACKING_QUERY_PARAMS = new Set([
+export const TRACKING_QUERY_PARAMS = new Set([
+  // Google Analytics & UTM
   'utm_source',
   'utm_medium',
   'utm_campaign',
@@ -136,18 +137,13 @@ const TRACKING_QUERY_PARAMS = new Set([
   'utm_reader',
   'utm_place',
   'utm_userid',
-  'gclid',
-  'gclsrc',
-  'dclid',
-  'fbclid',
-  'msclkid',
-  'twclid',
-  'igshid',
-  'ttclid',
-  'yclid',
-  'mc_cid',
-  'mc_eid',
-  'mkt_tok',
+  'utm_cid',
+  'utm_name',
+  'ga_source',
+  'ga_medium',
+  'ga_term',
+  'ga_content',
+  'ga_campaign',
   '_ga',
   '_gl',
   '_hsenc',
@@ -155,8 +151,108 @@ const TRACKING_QUERY_PARAMS = new Set([
   '__hssc',
   '__hstc',
   '__hsfp',
+  'hsctatracking',
+
+  // Google Ads
+  'gclid',
+  'gclsrc',
+  'dclid',
+  'wbraid',
+  'gbraid',
+
+  // Meta / Facebook / Instagram
+  'fbclid',
+  'fbadid',
+  'fb_action_ids',
+  'fb_action_types',
+  'fb_source',
+  'igshid',
+
+  // Microsoft Bing Ads
+  'msclkid',
+
+  // Twitter / X
+  'twclid',
+
+  // TikTok & Pinterest
+  'ttclid',
+  'pin_unauth',
+
+  // LinkedIn & Yandex
+  'li_fat_id',
+  'yclid',
+
+  // Mailchimp & HubSpot
+  'mc_cid',
+  'mc_eid',
+  'mkt_tok',
+
+  // Referral / Affiliate Tracking
   'ref_src',
   'ref_url',
+  'ref_sub',
+  'ref_code',
+  'spm',
+  'scm',
+  'aff_platform',
+  'aff_trace_key',
+  'cmpid',
+  'tracking_code',
+  'trk',
+  'ndp_tracking_id',
+]);
+
+/**
+ * Known functional parameter keys that must ALWAYS be preserved.
+ */
+export const FUNCTIONAL_QUERY_PARAMS = new Set([
+  'id',
+  'v',
+  't',
+  'time_continue',
+  'list',
+  'index',
+  'p',
+  'page',
+  'q',
+  'query',
+  'search',
+  'keyword',
+  'doc',
+  'docid',
+  'file',
+  'article',
+  'articleid',
+  'item',
+  'itemid',
+  'sku',
+  'product_id',
+  'post_id',
+  'entry_id',
+  'auth',
+  'token',
+  'key',
+  'code',
+  'state',
+  'redirect_uri',
+  'lang',
+  'hl',
+  'locale',
+  'country',
+  'tab',
+  'category',
+  'filter',
+  'sort',
+  'view',
+  'format',
+  'mode',
+  'theme',
+  'download',
+  'raw',
+  'limit',
+  'offset',
+  'start',
+  'size',
 ]);
 
 /**
@@ -181,9 +277,12 @@ export function decodeHtmlEntities(str: string): string {
 export interface CleanUrlResult {
   originalUrl: string;
   cleanedUrl: string;
+  displayUrl: string;
   domain: string;
   extractedTitle?: string;
   removedParams: string[];
+  preservedParams: string[];
+  hasTrackingParams: boolean;
   isValid: boolean;
 }
 
@@ -241,7 +340,17 @@ export const linkService = {
         } else {
           // Check if text has a domain inside
           const insideDomainMatch = text.match(/([a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?)/i);
-          if (insideDomainMatch && (insideDomainMatch[1].includes('.com') || insideDomainMatch[1].includes('.org') || insideDomainMatch[1].includes('.net') || insideDomainMatch[1].includes('.io') || insideDomainMatch[1].includes('.edu') || insideDomainMatch[1].includes('.gov') || insideDomainMatch[1].includes('.app') || insideDomainMatch[1].includes('.dev'))) {
+          if (
+            insideDomainMatch &&
+            (insideDomainMatch[1].includes('.com') ||
+              insideDomainMatch[1].includes('.org') ||
+              insideDomainMatch[1].includes('.net') ||
+              insideDomainMatch[1].includes('.io') ||
+              insideDomainMatch[1].includes('.edu') ||
+              insideDomainMatch[1].includes('.gov') ||
+              insideDomainMatch[1].includes('.app') ||
+              insideDomainMatch[1].includes('.dev'))
+          ) {
             foundUrl = `https://${insideDomainMatch[1]}`;
             const before = text.substring(0, insideDomainMatch.index).trim();
             const after = text.substring((insideDomainMatch.index || 0) + insideDomainMatch[1].length).trim();
@@ -270,14 +379,17 @@ export const linkService = {
   /**
    * Cleans a URL by safely extracting the URL from mixed text and stripping tracking parameters while strictly preserving functional parameters.
    */
-  cleanUrl(rawUrl: string): CleanUrlResult {
+  cleanUrl(rawUrl: string, options: { removeTracking?: boolean } = { removeTracking: true }): CleanUrlResult {
     let input = (rawUrl || '').trim();
     if (!input) {
       return {
         originalUrl: '',
         cleanedUrl: '',
+        displayUrl: '',
         domain: '',
         removedParams: [],
+        preservedParams: [],
+        hasTrackingParams: false,
         isValid: false,
       };
     }
@@ -300,73 +412,110 @@ export const linkService = {
         return {
           originalUrl: input,
           cleanedUrl: '',
+          displayUrl: '',
           domain: '',
           extractedTitle,
           removedParams: [],
+          preservedParams: [],
+          hasTrackingParams: false,
           isValid: false,
         };
       }
 
       const removedParams: string[] = [];
+      const preservedParams: string[] = [];
 
       // Check each search param
       const searchParams = new URLSearchParams(urlObj.search);
       const keysToDelete: string[] = [];
 
-      searchParams.forEach((_val, key) => {
+      searchParams.forEach((val, key) => {
         const lowerKey = key.toLowerCase();
-        // Remove tracking params
-        if (TRACKING_QUERY_PARAMS.has(lowerKey)) {
-          keysToDelete.push(key);
-          removedParams.push(key);
-        } else if (
+
+        // If explicitly functional, always preserve
+        if (FUNCTIONAL_QUERY_PARAMS.has(lowerKey)) {
+          preservedParams.push(`${key}=${val}`);
+          return;
+        }
+
+        // Check for tracking parameters
+        const isKnownTracking = TRACKING_QUERY_PARAMS.has(lowerKey);
+        const isUtmOrGa =
           (lowerKey.startsWith('utm_') || lowerKey.startsWith('ga_')) &&
           !lowerKey.includes('id') &&
-          !lowerKey.includes('article')
-        ) {
-          keysToDelete.push(key);
+          !lowerKey.includes('article') &&
+          !lowerKey.includes('page');
+
+        if (isKnownTracking || isUtmOrGa) {
+          if (options.removeTracking !== false) {
+            keysToDelete.push(key);
+          }
           removedParams.push(key);
+        } else {
+          preservedParams.push(`${key}=${val}`);
         }
       });
 
-      // Special handling for YouTube share tracking ('si' param)
+      // Special handling for YouTube share tracking ('si' param and 'feature=share')
       if (domain.includes('youtube.com') || domain.includes('youtu.be')) {
         if (searchParams.has('si')) {
-          keysToDelete.push('si');
-          removedParams.push('si');
+          if (options.removeTracking !== false && !keysToDelete.includes('si')) {
+            keysToDelete.push('si');
+          }
+          if (!removedParams.includes('si')) removedParams.push('si');
         }
         if (searchParams.has('feature') && searchParams.get('feature') === 'share') {
-          keysToDelete.push('feature');
-          removedParams.push('feature');
+          if (options.removeTracking !== false && !keysToDelete.includes('feature')) {
+            keysToDelete.push('feature');
+          }
+          if (!removedParams.includes('feature')) removedParams.push('feature');
         }
       }
 
-      keysToDelete.forEach((k) => searchParams.delete(k));
+      if (options.removeTracking !== false) {
+        keysToDelete.forEach((k) => searchParams.delete(k));
+      }
 
       // Reconstruct cleaned URL
       urlObj.search = searchParams.toString();
 
-      // Clean trailing slash if path is only '/'
+      // Clean empty fragments (e.g. trailing '#' with no identifier)
+      if (urlObj.hash === '#' || urlObj.hash === '') {
+        urlObj.hash = '';
+      }
+
+      // Clean trailing slash if path is only '/' and there is no search or hash
       let cleaned = urlObj.toString();
       if (urlObj.pathname === '/' && !urlObj.search && !urlObj.hash) {
         cleaned = `${urlObj.protocol}//${urlObj.host}`;
       }
 
+      // Clean display URL (e.g. domain.com/path)
+      let displayUrl = cleaned
+        .replace(/^https?:\/\//i, '')
+        .replace(/^www\./i, '');
+
       return {
         originalUrl: input,
         cleanedUrl: cleaned,
+        displayUrl,
         domain,
         extractedTitle: extractedTitle || undefined,
         removedParams,
+        preservedParams,
+        hasTrackingParams: removedParams.length > 0,
         isValid: true,
       };
     } catch {
       return {
         originalUrl: input,
         cleanedUrl: '',
+        displayUrl: '',
         domain: '',
         extractedTitle,
         removedParams: [],
+        preservedParams: [],
+        hasTrackingParams: false,
         isValid: false,
       };
     }
@@ -402,88 +551,103 @@ export const linkService = {
         domain.includes('researchgate.net') ||
         domain.includes('ieeexplore.ieee.org') ||
         domain.includes('sciencedirect.com') ||
+        domain.includes('nature.com') ||
         domain.includes('springer.com') ||
+        domain.includes('acm.org') ||
+        domain.includes('scholar.google.com') ||
         domain.includes('semanticscholar.org') ||
         domain.includes('jstor.org') ||
-        domain.includes('biorxiv.org') ||
-        domain.includes('medrxiv.org') ||
-        domain.includes('acm.org')
+        domain.includes('nih.gov') ||
+        domain.includes('biorxiv.org')
       ) {
         return 'paper';
       }
 
-      // 5. Online Courses
-      if (
-        domain.includes('coursera.org') ||
-        domain.includes('udemy.com') ||
-        domain.includes('edx.org') ||
-        domain.includes('khanacademy.org') ||
-        domain.includes('codecademy.com') ||
-        domain.includes('pluralsight.com') ||
-        domain.includes('datacamp.com') ||
-        domain.includes('freecodecamp.org')
-      ) {
-        return 'course';
-      }
-
-      // 6. Documentation
+      // 5. Documentation
       if (
         domain.startsWith('docs.') ||
-        domain.includes('documentation') ||
-        domain.includes('devdocs.io') ||
-        domain.includes('gitbook.io') ||
-        domain.includes('readthedocs.io') ||
-        domain.includes('readme.io') ||
+        path.includes('/docs') ||
+        path.includes('/documentation') ||
+        path.includes('/api-reference') ||
         domain.includes('developer.mozilla.org') ||
+        domain.includes('devdocs.io') ||
         domain.includes('react.dev') ||
         domain.includes('nextjs.org') ||
-        domain.includes('vuejs.org') ||
-        domain.includes('angular.io') ||
+        domain.includes('expo.dev') ||
+        domain.includes('typescriptlang.org') ||
         domain.includes('tailwindcss.com') ||
-        domain.includes('supabase.com/docs') ||
-        path.startsWith('/docs') ||
-        path.startsWith('/documentation')
+        domain.includes('python.org') ||
+        domain.includes('rust-lang.org') ||
+        domain.includes('golang.org') ||
+        domain.includes('kubernetes.io') ||
+        domain.includes('docker.com')
       ) {
         return 'docs';
       }
 
-      // 7. AI Tools & Resources
+      // 6. Online Courses
       if (
-        domain.includes('chatgpt.com') ||
+        domain.includes('coursera.org') ||
+        domain.includes('edx.org') ||
+        domain.includes('udemy.com') ||
+        domain.includes('khanacademy.org') ||
+        domain.includes('mitocw.mit.edu') ||
+        domain.includes('ocw.mit.edu') ||
+        domain.includes('datacamp.com') ||
+        domain.includes('codecademy.com') ||
+        domain.includes('freecodecamp.org') ||
+        domain.includes('scrimba.com') ||
+        domain.includes('frontendmasters.com') ||
+        domain.includes('pluralsight.com')
+      ) {
+        return 'course';
+      }
+
+      // 7. AI Resources
+      if (
         domain.includes('openai.com') ||
+        domain.includes('chatgpt.com') ||
         domain.includes('claude.ai') ||
         domain.includes('anthropic.com') ||
         domain.includes('huggingface.co') ||
-        domain.includes('v0.dev') ||
-        domain.includes('replicate.com') ||
+        domain.includes('deepmind.google') ||
+        domain.includes('midjourney.com') ||
         domain.includes('perplexity.ai') ||
-        domain.includes('gemini.google.com') ||
-        domain.includes('midjourney.com')
+        domain.includes('v0.dev') ||
+        domain.includes('poe.com') ||
+        domain.includes('civitai.com')
       ) {
         return 'ai_tool';
       }
 
-      // 8. University Resources
+      // 8. University LMS / Portals
       if (
         domain.endsWith('.edu') ||
-        domain.includes('.edu.') ||
-        domain.includes('.ac.') ||
-        domain.endsWith('.ac.uk') ||
-        domain.includes('canvas') ||
-        domain.includes('blackboard') ||
-        domain.includes('moodle')
+        domain.includes('canvas.') ||
+        domain.includes('blackboard.') ||
+        domain.includes('moodle.') ||
+        domain.includes('brightspace.') ||
+        domain.includes('portal.') ||
+        domain.includes('lms.') ||
+        domain.includes('.edu.pk') ||
+        domain.includes('.ac.uk') ||
+        domain.includes('.edu.au')
       ) {
         return 'university';
       }
 
-      // 9. Blogs
+      // 9. Blogs / Developer articles
       if (
         domain.includes('medium.com') ||
         domain.includes('dev.to') ||
         domain.includes('hashnode.dev') ||
         domain.includes('substack.com') ||
-        domain.includes('blogger.com') ||
-        domain.includes('wordpress.com')
+        domain.includes('hackernoon.com') ||
+        domain.includes('css-tricks.com') ||
+        domain.includes('smashingmagazine.com') ||
+        path.includes('/blog/') ||
+        path.includes('/post/') ||
+        path.includes('/article/')
       ) {
         return 'blog';
       }
@@ -491,71 +655,76 @@ export const linkService = {
       // 10. Web Tools
       if (
         domain.includes('codepen.io') ||
-        domain.includes('codesandbox.io') ||
-        domain.includes('replit.com') ||
+        domain.includes('jsfiddle.net') ||
         domain.includes('stackblitz.com') ||
+        domain.includes('replit.com') ||
         domain.includes('regex101.com') ||
-        domain.includes('jsonlint.com') ||
+        domain.includes('transform.tools') ||
+        domain.includes('jsonformatter.org') ||
         domain.includes('figma.com') ||
         domain.includes('canva.com') ||
-        domain.includes('notion.so') ||
-        domain.includes('trello.com')
+        domain.includes('notion.so')
       ) {
         return 'tool';
       }
 
-      // Check title keywords if available
-      if (title) {
-        const lowerTitle = title.toLowerCase();
-        if (lowerTitle.includes('tutorial') || lowerTitle.includes('guide')) return 'article';
-        if (lowerTitle.includes('paper') || lowerTitle.includes('journal')) return 'paper';
-        if (lowerTitle.includes('documentation') || lowerTitle.includes('api reference')) return 'docs';
-        if (lowerTitle.includes('course') || lowerTitle.includes('lecture')) return 'course';
-        if (lowerTitle.includes('cheat sheet') || lowerTitle.includes('summary')) return 'study_material';
+      // 11. Study Material
+      if (
+        domain.includes('quizlet.com') ||
+        domain.includes('chegg.com') ||
+        domain.includes('studocu.com') ||
+        domain.includes('coursehero.com') ||
+        domain.includes('brainly.com') ||
+        domain.includes('geeksforgeeks.org') ||
+        domain.includes('w3schools.com') ||
+        domain.includes('tutorialspoint.com') ||
+        domain.includes('javatpoint.com')
+      ) {
+        return 'study_material';
       }
 
-      return 'article';
+      // 12. Generic Article check by title or path
+      if (
+        (title && title.length > 30) ||
+        path.includes('/news/') ||
+        path.includes('/stories/') ||
+        path.includes('/p/')
+      ) {
+        return 'article';
+      }
+
+      return 'website';
     } catch {
       return 'website';
     }
   },
 
   /**
-   * Generates a high-quality favicon URL for any domain using Google S2 service with direct fallback.
+   * Generates favicon URL using Google's public favicon service.
    */
-  getFaviconUrl(domain: string): string {
+  getFaviconUrl(domain: string, size: number = 64): string {
     if (!domain) return '';
-    return `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
+    const cleanDomain = domain.replace(/^www\./i, '').toLowerCase();
+    return `https://www.google.com/s2/favicons?domain=${cleanDomain}&sz=${size}`;
   },
 
   /**
-   * Safely fetches webpage metadata (title, description, preview image, favicon) with a non-blocking timeout.
+   * Fetches rich metadata (title, description, image, favicon) from the target URL via HTTP request.
    */
-  async fetchMetadata(targetUrl: string): Promise<LinkMetadataResult> {
-    const cleanResult = this.cleanUrl(targetUrl);
-    const domain = cleanResult.domain || 'website.com';
-    const fallbackFavicon = this.getFaviconUrl(domain);
-    const fallbackType = this.detectResourceType(cleanResult.cleanedUrl);
-
-    if (!cleanResult.isValid) {
-      return {
-        title: domain || 'Saved Resource',
-        description: '',
-        domain,
-        faviconUrl: fallbackFavicon,
-        detectedType: fallbackType,
-      };
-    }
-
+  async fetchMetadata(url: string): Promise<Partial<LinkMetadataResult>> {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const cleanRes = this.cleanUrl(url);
+      if (!cleanRes.isValid) return {};
 
-      const response = await fetch(cleanResult.cleanedUrl, {
+      // Controller with 4.5 second timeout to keep UI snappy
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4500);
+
+      const response = await fetch(cleanRes.cleanedUrl, {
         method: 'GET',
         headers: {
           'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 (StudentNotes App; Academic Resource Manager)',
           Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         },
         signal: controller.signal,
@@ -565,87 +734,80 @@ export const linkService = {
 
       if (!response.ok) {
         return {
-          title: domain,
-          description: '',
-          domain,
-          faviconUrl: fallbackFavicon,
-          detectedType: fallbackType,
+          domain: cleanRes.domain,
+          faviconUrl: this.getFaviconUrl(cleanRes.domain),
+          detectedType: this.detectResourceType(cleanRes.cleanedUrl),
         };
       }
 
-      // Read initial 60KB to parse meta tags without heavy memory use
+      // Read initial 30KB of HTML stream for meta tags
       const htmlText = await response.text();
-      const headChunk = htmlText.substring(0, 65000);
+      const htmlSlice = htmlText.substring(0, 35000);
 
-      // 1. Extract Title
+      // 1. Extract <title>
       let title = '';
-      const ogTitleMatch = headChunk.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) ||
-                           headChunk.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i);
+      const ogTitleMatch = htmlSlice.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i);
+      const twitterTitleMatch = htmlSlice.match(/<meta[^>]+name=["']twitter:title["'][^>]+content=["']([^"']+)["']/i);
+      const standardTitleMatch = htmlSlice.match(/<title[^>]*>([^<]+)<\/title>/i);
+
       if (ogTitleMatch && ogTitleMatch[1]) {
-        title = decodeHtmlEntities(ogTitleMatch[1]);
-      } else {
-        const twitterTitleMatch = headChunk.match(/<meta[^>]+name=["']twitter:title["'][^>]+content=["']([^"']+)["']/i);
-        if (twitterTitleMatch && twitterTitleMatch[1]) {
-          title = decodeHtmlEntities(twitterTitleMatch[1]);
-        } else {
-          const titleTagMatch = headChunk.match(/<title[^>]*>([^<]+)<\/title>/i);
-          if (titleTagMatch && titleTagMatch[1]) {
-            title = decodeHtmlEntities(titleTagMatch[1]);
-          }
-        }
+        title = ogTitleMatch[1];
+      } else if (twitterTitleMatch && twitterTitleMatch[1]) {
+        title = twitterTitleMatch[1];
+      } else if (standardTitleMatch && standardTitleMatch[1]) {
+        title = standardTitleMatch[1];
       }
+
+      title = decodeHtmlEntities(title);
+
+      // Clean common domain suffixes from title e.g. "Article Title - Medium" -> "Article Title"
+      title = title
+        .replace(/\s*[-–|•:]\s*(YouTube|Medium|GitHub|Wikipedia|Dev\.to|Coursera|Khan Academy|Reddit|Stack Overflow|LinkedIn|Twitter|X|Docs|Documentation)$/i, '')
+        .trim();
 
       // 2. Extract Description
       let description = '';
-      const ogDescMatch = headChunk.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i) ||
-                          headChunk.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["']/i);
+      const ogDescMatch = htmlSlice.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i);
+      const metaDescMatch = htmlSlice.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i);
+
       if (ogDescMatch && ogDescMatch[1]) {
-        description = decodeHtmlEntities(ogDescMatch[1]);
-      } else {
-        const descMatch = headChunk.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i);
-        if (descMatch && descMatch[1]) {
-          description = decodeHtmlEntities(descMatch[1]);
-        }
+        description = ogDescMatch[1];
+      } else if (metaDescMatch && metaDescMatch[1]) {
+        description = metaDescMatch[1];
       }
+      description = decodeHtmlEntities(description).substring(0, 200);
 
       // 3. Extract Preview Image
-      let previewImageUrl: string | undefined = undefined;
-      const ogImageMatch = headChunk.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
-                           headChunk.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+      let previewImageUrl: string | undefined;
+      const ogImageMatch = htmlSlice.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i);
+      const twitterImageMatch = htmlSlice.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i);
+
       if (ogImageMatch && ogImageMatch[1]) {
-        const rawImg = ogImageMatch[1].trim();
-        if (rawImg.startsWith('http://') || rawImg.startsWith('https://')) {
-          previewImageUrl = rawImg;
-        } else if (rawImg.startsWith('/')) {
-          const urlObj = new URL(cleanResult.cleanedUrl);
-          previewImageUrl = `${urlObj.protocol}//${urlObj.host}${rawImg}`;
-        }
+        previewImageUrl = ogImageMatch[1];
+      } else if (twitterImageMatch && twitterImageMatch[1]) {
+        previewImageUrl = twitterImageMatch[1];
       }
 
-      // 4. Final title fallback
-      if (!title) {
-        title = domain;
+      // Ensure preview image URL is absolute
+      if (previewImageUrl && previewImageUrl.startsWith('/')) {
+        try {
+          const base = new URL(cleanRes.cleanedUrl);
+          previewImageUrl = `${base.protocol}//${base.host}${previewImageUrl}`;
+        } catch {}
       }
 
-      const detectedType = this.detectResourceType(cleanResult.cleanedUrl, title);
+      const detectedType = this.detectResourceType(cleanRes.cleanedUrl, title);
 
       return {
-        title,
-        description,
-        domain,
-        faviconUrl: fallbackFavicon,
-        previewImageUrl,
+        title: title || undefined,
+        description: description || undefined,
+        domain: cleanRes.domain,
+        faviconUrl: this.getFaviconUrl(cleanRes.domain),
+        previewImageUrl: previewImageUrl || undefined,
         detectedType,
       };
     } catch {
-      // Return safe fallback values on network timeout or failure
-      return {
-        title: domain,
-        description: '',
-        domain,
-        faviconUrl: fallbackFavicon,
-        detectedType: fallbackType,
-      };
+      return {};
     }
   },
 };
