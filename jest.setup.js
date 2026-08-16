@@ -2,11 +2,24 @@ const crypto = require('crypto');
 
 // Mock expo and react native native modules
 jest.mock('react-native-url-polyfill/auto', () => {});
-jest.mock('@react-native-async-storage/async-storage', () => ({
-  getItem: jest.fn(() => Promise.resolve(null)),
-  setItem: jest.fn(() => Promise.resolve()),
-  removeItem: jest.fn(() => Promise.resolve()),
-}));
+jest.mock('@react-native-async-storage/async-storage', () => {
+  let store = {};
+  return {
+    getItem: jest.fn((key) => Promise.resolve(store[key] || null)),
+    setItem: jest.fn((key, val) => {
+      store[key] = val;
+      return Promise.resolve();
+    }),
+    removeItem: jest.fn((key) => {
+      delete store[key];
+      return Promise.resolve();
+    }),
+    clear: jest.fn(() => {
+      store = {};
+      return Promise.resolve();
+    }),
+  };
+});
 
 jest.mock('expo-crypto', () => ({
   getRandomBytesAsync: jest.fn(async (byteCount) => {

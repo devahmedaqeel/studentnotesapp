@@ -5,10 +5,101 @@ import { folderRepository } from '../database/repositories/folderRepository';
 import { noteRepository } from '../database/repositories/noteRepository';
 import { pdfRepository } from '../database/repositories/pdfRepository';
 import { tagRepository } from '../database/repositories/tagRepository';
+import { documentRepository } from '../database/repositories/documentRepository';
+import { diaryRepository } from '../database/repositories/diaryRepository';
+import { timetableRepository } from '../database/repositories/timetableRepository';
+import { savedLinkRepository } from '../database/repositories/savedLinkRepository';
 import * as FileSystem from 'expo-file-system/legacy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { base64ToArrayBuffer } from '../utils/binary';
 
 export const LAST_SYNCED_KEY = 'studentnotes_last_synced_at';
+export const LOCAL_DATA_OWNER_KEY = 'studentnotes_local_data_owner';
+
+const USER_DATA_TABLES_DELETE_ORDER = [
+  'status_views',
+  'student_statuses',
+  'chat_outgoing_queue',
+  'chat_messages',
+  'chat_conversations',
+  'student_blocked',
+  'student_connections',
+  'username_history',
+  'student_profiles',
+  'user_privacy_settings',
+  'saved_links',
+  'diary_attachments',
+  'diary_events',
+  'timetable_classes',
+  'documents',
+  'document_folders',
+  'note_tags',
+  'tags',
+  'note_pages',
+  'notes',
+  'pdfs',
+  'folders',
+  'subjects',
+  'timetable_settings',
+];
+
+async function uploadLocalFileIfNeeded(
+  bucket: string,
+  localOrRemotePath: string,
+  storagePath: string,
+  contentType: string
+): Promise<string> {
+  if (
+    !localOrRemotePath ||
+    localOrRemotePath.startsWith('http://') ||
+    localOrRemotePath.startsWith('https://') ||
+    localOrRemotePath.startsWith(`${bucket}/`)
+  ) {
+    return localOrRemotePath;
+  }
+
+  try {
+    const fileInfo = await FileSystem.getInfoAsync(localOrRemotePath);
+    if (!fileInfo.exists) return localOrRemotePath;
+
+    const base64 = await FileSystem.readAsStringAsync(localOrRemotePath, {
+      encoding: 'base64' as any,
+    });
+
+    const { data } = await supabase.storage
+      .from(bucket)
+      .upload(storagePath, base64ToArrayBuffer(base64), {
+        contentType,
+        upsert: true,
+      });
+
+    return data?.path || localOrRemotePath;
+  } catch (e) {
+    console.warn(`${bucket} upload warning:`, e);
+    return localOrRemotePath;
+  }
+}
+
+async function clearLocalUserData(): Promise<void> {
+  const db = await getDatabase();
+  await db.execAsync('PRAGMA foreign_keys = OFF;');
+  try {
+    for (const table of USER_DATA_TABLES_DELETE_ORDER) {
+      await db.runAsync(`DELETE FROM ${table}`);
+    }
+  } finally {
+    await db.execAsync('PRAGMA foreign_keys = ON;');
+  }
+}
+
+async function ensureLocalDataOwner(userId: string): Promise<void> {
+  const owner = await AsyncStorage.getItem(LOCAL_DATA_OWNER_KEY);
+  if (owner && owner !== userId) {
+    await clearLocalUserData();
+    await AsyncStorage.removeItem(LAST_SYNCED_KEY);
+  }
+  await AsyncStorage.setItem(LOCAL_DATA_OWNER_KEY, userId);
+}
 
 export const syncService = {
   /**
@@ -16,6 +107,12 @@ export const syncService = {
    */
   async getLastSyncedAt(): Promise<string | null> {
     return AsyncStorage.getItem(LAST_SYNCED_KEY);
+  },
+
+  async clearLocalUserData(): Promise<void> {
+    await clearLocalUserData();
+    await AsyncStorage.removeItem(LOCAL_DATA_OWNER_KEY);
+    await AsyncStorage.removeItem(LAST_SYNCED_KEY);
   },
 
   /**
@@ -29,6 +126,7 @@ export const syncService = {
     if (!userId || userId === 'guest_user') return false;
 
     try {
+      await ensureLocalDataOwner(userId);
       const db = await getDatabase();
       onProgress?.('Restoring your account data from cloud...', 1, 6);
 
@@ -131,7 +229,7 @@ export const syncService = {
                 page.id,
                 page.note_id,
                 page.page_number,
-                page.file_path,
+                page.image_url || page.file_path,
                 page.created_at ? (typeof page.created_at === 'number' ? page.created_at : new Date(page.created_at).getTime()) : Date.now(),
               ]
             );
@@ -158,7 +256,7 @@ export const syncService = {
                 pdf.subject_id,
                 pdf.folder_id || null,
                 pdf.title,
-                pdf.file_path,
+                pdf.file_url || pdf.file_path,
                 pdf.page_count || 0,
                 pdf.is_favorite ? 1 : 0,
                 pdf.created_at ? (typeof pdf.created_at === 'number' ? pdf.created_at : new Date(pdf.created_at).getTime()) : Date.now(),
@@ -191,14 +289,14 @@ export const syncService = {
                 userId,
                 doc.title,
                 doc.original_file_name || doc.originalFileName || doc.title,
-                doc.file_path || doc.filePath,
+                doc.file_url || doc.file_path || doc.filePath,
                 doc.file_type || doc.fileType || 'pdf',
                 doc.mime_type || doc.mimeType || 'application/pdf',
                 doc.file_size_bytes || doc.fileSizeBytes || 0,
                 doc.folder_id || doc.folderId || null,
                 doc.category || 'General',
-                doc.favorite ? 1 : 0,
-                doc.cloud_url || doc.cloudUrl || null,
+                doc.is_favorite || doc.favorite ? 1 : 0,
+                doc.file_url || doc.cloud_url || doc.cloudUrl || null,
                 doc.thumbnail_path || doc.thumbnailPath || null,
                 doc.created_at ? (typeof doc.created_at === 'number' ? doc.created_at : new Date(doc.created_at).getTime()) : Date.now(),
                 doc.updated_at ? (typeof doc.updated_at === 'number' ? doc.updated_at : new Date(doc.updated_at).getTime()) : Date.now(),
@@ -248,7 +346,35 @@ export const syncService = {
         }
       } catch (e) {}
 
-      // 8. Download & Restore Timetable Classes
+      // 8. Download & Restore Diary Attachments
+      try {
+        const { data: cloudAttachments } = await supabase
+          .from('diary_attachments')
+          .select('*')
+          .eq('user_id', userId);
+
+        if (cloudAttachments && cloudAttachments.length > 0) {
+          for (const att of cloudAttachments) {
+            await db.runAsync(
+              `INSERT OR REPLACE INTO diary_attachments (
+                id, eventId, documentId, title, filePath, fileType, fileSizeBytes, createdAt
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                att.id,
+                att.event_id || att.eventId,
+                att.document_id || att.documentId || null,
+                att.title,
+                att.file_url || att.file_path || att.filePath,
+                att.file_type || att.fileType || 'pdf',
+                att.file_size_bytes || att.fileSizeBytes || 0,
+                att.created_at ? (typeof att.created_at === 'number' ? att.created_at : new Date(att.created_at).getTime()) : Date.now(),
+              ]
+            );
+          }
+        }
+      } catch (e) {}
+
+      // 9. Download & Restore Timetable Classes
       try {
         const { data: cloudClasses } = await supabase
           .from('timetable_classes')
@@ -285,6 +411,74 @@ export const syncService = {
         }
       } catch (e) {}
 
+      // 10. Download & Restore Timetable Settings
+      try {
+        const { data: cloudSettings } = await supabase
+          .from('timetable_settings')
+          .select('*')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (cloudSettings) {
+          await db.runAsync(
+            `INSERT OR REPLACE INTO timetable_settings (
+              id, dailyNotificationEnabled, notificationTime, notifyFreeDays,
+              classRemindersEnabled, defaultReminderMinutes, updatedAt
+            ) VALUES ('default_settings', ?, ?, ?, ?, ?, ?)`,
+            [
+              cloudSettings.daily_notification_enabled ? 1 : 0,
+              cloudSettings.notification_time || '01:00',
+              cloudSettings.notify_free_days ? 1 : 0,
+              cloudSettings.class_reminders_enabled ? 1 : 0,
+              cloudSettings.default_reminder_minutes || 10,
+              cloudSettings.updated_at || Date.now(),
+            ]
+          );
+        }
+      } catch (e) {}
+
+      // 11. Download & Restore Saved Links
+      try {
+        const { data: cloudLinks } = await supabase
+          .from('saved_links')
+          .select('*')
+          .eq('user_id', userId);
+
+        if (cloudLinks && cloudLinks.length > 0) {
+          for (const link of cloudLinks) {
+            await db.runAsync(
+              `INSERT OR REPLACE INTO saved_links (
+                id, userId, originalUrl, cleanedUrl, title, resourceType,
+                customType, domain, faviconUrl, previewImageUrl, description,
+                subjectId, subjectName, category, tags, personalNote,
+                favorite, createdAt, updatedAt
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                link.id,
+                userId,
+                link.original_url || link.originalUrl || link.cleaned_url || link.cleanedUrl,
+                link.cleaned_url || link.cleanedUrl,
+                link.title || 'Saved Resource',
+                link.resource_type || link.resourceType || 'website',
+                link.custom_type || link.customType || null,
+                link.domain || 'website.com',
+                link.favicon_url || link.faviconUrl || null,
+                link.preview_image_url || link.previewImageUrl || null,
+                link.description || null,
+                link.subject_id || link.subjectId || null,
+                link.subject_name || link.subjectName || null,
+                link.category || null,
+                link.tags ? (typeof link.tags === 'string' ? link.tags : JSON.stringify(link.tags)) : '[]',
+                link.personal_note || link.personalNote || null,
+                link.is_favorite !== undefined ? (link.is_favorite ? 1 : 0) : (link.favorite ? 1 : 0),
+                link.created_at ? (typeof link.created_at === 'number' ? link.created_at : new Date(link.created_at).getTime()) : Date.now(),
+                link.updated_at ? (typeof link.updated_at === 'number' ? link.updated_at : new Date(link.updated_at).getTime()) : Date.now(),
+              ]
+            );
+          }
+        }
+      } catch (e) {}
+
       const nowIso = new Date().toISOString();
       await AsyncStorage.setItem(LAST_SYNCED_KEY, nowIso);
       onProgress?.('Account data synchronized successfully.', 6, 6);
@@ -305,6 +499,12 @@ export const syncService = {
     if (!userId || userId === 'guest_user') return false;
 
     try {
+      const owner = await AsyncStorage.getItem(LOCAL_DATA_OWNER_KEY);
+      if (owner && owner !== userId) {
+        console.warn('Blocked sync because local data belongs to a different account.');
+        return false;
+      }
+      await ensureLocalDataOwner(userId);
       onProgress?.('Fetching local records...', 1, 6);
 
       // 1. Fetch Local Data
@@ -313,6 +513,12 @@ export const syncService = {
       const localNotes = await noteRepository.getAll();
       const localPdfs = await pdfRepository.getAll();
       const localTags = await tagRepository.getAll();
+      const localDocumentFolders = await documentRepository.getAllFolders();
+      const localDocuments = await documentRepository.getAll();
+      const localDiaryEvents = await diaryRepository.getAll();
+      const localTimetableClasses = await timetableRepository.getAll();
+      const localTimetableSettings = await timetableRepository.getSettings();
+      const localSavedLinks = await savedLinkRepository.getAll();
 
       onProgress?.('Syncing subjects & folders...', 2, 6);
 
@@ -376,7 +582,7 @@ export const syncService = {
 
                   const { data } = await supabase.storage
                     .from('note-files')
-                    .upload(storagePath, Buffer.from(base64, 'base64'), {
+                    .upload(storagePath, base64ToArrayBuffer(base64), {
                       contentType: 'image/jpeg',
                       upsert: true,
                     });
@@ -396,6 +602,7 @@ export const syncService = {
               note_id: note.id,
               page_number: page.pageNumber,
               file_path: cloudPath,
+              image_url: cloudPath,
               created_at: page.createdAt,
             });
           }
@@ -421,7 +628,7 @@ export const syncService = {
 
               const { data } = await supabase.storage
                 .from('pdf-files')
-                .upload(storagePath, Buffer.from(base64, 'base64'), {
+                .upload(storagePath, base64ToArrayBuffer(base64), {
                   contentType: 'application/pdf',
                   upsert: true,
                 });
@@ -441,6 +648,7 @@ export const syncService = {
           subject_id: pdf.subjectId,
           title: pdf.title,
           file_path: cloudPdfUrl,
+          file_url: cloudPdfUrl,
           page_count: pdf.pageCount,
           file_size_bytes: pdf.fileSize || 0,
           is_favorite: pdf.favorite,
@@ -458,7 +666,149 @@ export const syncService = {
         });
       }
 
-      // 7. Download and Merge any remote updates
+      onProgress?.('Syncing document vault, diary, and timetable...', 6, 7);
+
+      // 7. Upload Document Vault folders and documents
+      for (const folder of localDocumentFolders) {
+        await supabase.from('document_folders').upsert({
+          id: folder.id,
+          user_id: userId,
+          name: folder.name,
+          color: folder.color || '#4F46E5',
+          created_at: folder.createdAt,
+          updated_at: folder.updatedAt,
+        });
+      }
+
+      for (const doc of localDocuments) {
+        const cloudPath = await uploadLocalFileIfNeeded(
+          'documents',
+          doc.cloudUrl || doc.filePath,
+          `${userId}/${doc.id}/${doc.originalFileName}`,
+          doc.mimeType || 'application/octet-stream'
+        );
+
+        await supabase.from('documents').upsert({
+          id: doc.id,
+          user_id: userId,
+          title: doc.title,
+          original_file_name: doc.originalFileName,
+          file_url: cloudPath,
+          file_type: doc.fileType,
+          mime_type: doc.mimeType,
+          file_size_bytes: doc.fileSizeBytes || 0,
+          folder_id: doc.folderId || null,
+          category: doc.category || null,
+          is_favorite: doc.favorite,
+          thumbnail_url: doc.thumbnailPath || null,
+          created_at: doc.createdAt,
+          updated_at: doc.updatedAt,
+        });
+      }
+
+      // 8. Upload Diary events and attachments
+      for (const event of localDiaryEvents) {
+        await supabase.from('diary_events').upsert({
+          id: event.id,
+          user_id: userId,
+          title: event.title,
+          event_type: event.eventType,
+          subject_id: event.subjectId || null,
+          description: event.description || null,
+          due_date: event.dueDate,
+          due_time: event.dueTime || null,
+          due_timestamp: event.dueTimestamp,
+          priority: event.priority,
+          status: event.status,
+          is_important: event.isImportant,
+          reminder_enabled: event.reminderEnabled,
+          reminder_type: event.reminderType,
+          daily_until_completed: event.dailyUntilCompleted,
+          completed_at: event.completedAt || null,
+          created_at: event.createdAt,
+          updated_at: event.updatedAt,
+        });
+
+        for (const att of event.attachments || []) {
+          const cloudPath = await uploadLocalFileIfNeeded(
+            'documents',
+            att.filePath,
+            `${userId}/diary/${event.id}/${att.id}_${att.title}`,
+            att.fileType === 'pdf' ? 'application/pdf' : 'application/octet-stream'
+          );
+
+          await supabase.from('diary_attachments').upsert({
+            id: att.id,
+            user_id: userId,
+            event_id: event.id,
+            document_id: att.documentId || null,
+            title: att.title,
+            file_url: cloudPath,
+            file_type: att.fileType,
+            file_size_bytes: att.fileSizeBytes || 0,
+            created_at: att.createdAt,
+          });
+        }
+      }
+
+      // 9. Upload Timetable classes and settings
+      for (const cls of localTimetableClasses) {
+        await supabase.from('timetable_classes').upsert({
+          id: cls.id,
+          user_id: userId,
+          subject_id: cls.subjectId || null,
+          subject_name: cls.subjectName,
+          subject_color: cls.subjectColor || null,
+          teacher_name: cls.teacherName || null,
+          day_of_week: cls.dayOfWeek,
+          start_time: cls.startTime,
+          end_time: cls.endTime,
+          room: cls.room || null,
+          building: cls.building || null,
+          notes: cls.notes || null,
+          reminder_enabled: cls.reminderEnabled,
+          reminder_minutes: cls.reminderMinutes,
+          created_at: cls.createdAt,
+          updated_at: cls.updatedAt,
+        });
+      }
+
+      await supabase.from('timetable_settings').upsert({
+        user_id: userId,
+        daily_notification_enabled: localTimetableSettings.dailyNotificationEnabled,
+        notification_time: localTimetableSettings.notificationTime,
+        notify_free_days: localTimetableSettings.notifyFreeDays,
+        class_reminders_enabled: localTimetableSettings.classRemindersEnabled,
+        default_reminder_minutes: localTimetableSettings.defaultReminderMinutes,
+        updated_at: Date.now(),
+      });
+
+      // 10. Upload Saved Links
+      for (const link of localSavedLinks) {
+        await supabase.from('saved_links').upsert({
+          id: link.id,
+          user_id: userId,
+          original_url: link.originalUrl,
+          cleaned_url: link.cleanedUrl,
+          title: link.title,
+          resource_type: link.resourceType,
+          custom_type: link.customType || null,
+          domain: link.domain,
+          favicon_url: link.faviconUrl || null,
+          preview_image_url: link.previewImageUrl || null,
+          description: link.description || null,
+          subject_id: link.subjectId || null,
+          subject_name: link.subjectName || null,
+          category: link.category || null,
+          tags: JSON.stringify(link.tags || []),
+          personal_note: link.personalNote || null,
+          is_favorite: link.favorite,
+          created_at: link.createdAt,
+          updated_at: link.updatedAt,
+        });
+      }
+
+      // 11. Download and Merge any remote updates
       await this.downloadCloudDataToLocal(userId, onProgress);
 
       const nowIso = new Date().toISOString();

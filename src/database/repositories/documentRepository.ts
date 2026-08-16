@@ -1,4 +1,4 @@
-import { getDatabase } from '../database';
+import { getDatabase, sanitizeParams } from '../database';
 import {
   VaultDocument,
   DocumentFolder,
@@ -72,7 +72,7 @@ export const documentRepository = {
         break;
     }
 
-    const rows = await db.getAllAsync<any>(query, params);
+    const rows = await db.getAllAsync<any>(query, sanitizeParams(params));
     return rows.map(this.mapRowToDocument);
   },
 
@@ -80,10 +80,11 @@ export const documentRepository = {
    * Retrieves a single document by its ID.
    */
   async getById(id: string): Promise<VaultDocument | null> {
+    if (!id) return null;
     const db = await getDatabase();
     const row = await db.getFirstAsync<any>(
       `SELECT * FROM documents WHERE id = ?`,
-      [id]
+      sanitizeParams([id])
     );
     if (!row) return null;
     return this.mapRowToDocument(row);
@@ -116,7 +117,7 @@ export const documentRepository = {
           OR LOWER(category) LIKE ? 
           OR LOWER(fileType) LIKE ?
        ORDER BY updatedAt DESC`,
-      [pattern, pattern, pattern, pattern]
+      sanitizeParams([pattern, pattern, pattern, pattern])
     );
     return rows.map(this.mapRowToDocument);
   },
@@ -140,14 +141,14 @@ export const documentRepository = {
         mimeType, fileSizeBytes, folderId, category, favorite,
         cloudUrl, thumbnailPath, createdAt, updatedAt
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
+      sanitizeParams([
         newDoc.id,
         newDoc.userId || null,
-        newDoc.title,
-        newDoc.originalFileName,
+        newDoc.title || 'Untitled Document',
+        newDoc.originalFileName || newDoc.title || 'Document',
         newDoc.filePath,
-        newDoc.fileType,
-        newDoc.mimeType,
+        newDoc.fileType || 'other',
+        newDoc.mimeType || 'application/octet-stream',
         newDoc.fileSizeBytes || 0,
         newDoc.folderId || null,
         newDoc.category || null,
@@ -156,7 +157,7 @@ export const documentRepository = {
         newDoc.thumbnailPath || null,
         newDoc.createdAt,
         newDoc.updatedAt,
-      ]
+      ])
     );
 
     return newDoc;
@@ -186,7 +187,7 @@ export const documentRepository = {
         thumbnailPath = ?,
         updatedAt = ?
       WHERE id = ?`,
-      [
+      sanitizeParams([
         updated.title,
         updated.folderId || null,
         updated.category || null,
@@ -195,7 +196,7 @@ export const documentRepository = {
         updated.thumbnailPath || null,
         updated.updatedAt,
         id,
-      ]
+      ])
     );
 
     return updated;
@@ -205,13 +206,14 @@ export const documentRepository = {
    * Renames a document safely.
    */
   async rename(id: string, newTitle: string): Promise<boolean> {
+    if (!id) return false;
     const db = await getDatabase();
     const cleanTitle = newTitle.trim();
     if (!cleanTitle) return false;
 
     const res = await db.runAsync(
       `UPDATE documents SET title = ?, updatedAt = ? WHERE id = ?`,
-      [cleanTitle, Date.now(), id]
+      sanitizeParams([cleanTitle, Date.now(), id])
     );
     return res.changes > 0;
   },
@@ -220,10 +222,11 @@ export const documentRepository = {
    * Moves a document to a different folder or main list (null).
    */
   async moveToFolder(id: string, folderId: string | null): Promise<boolean> {
+    if (!id) return false;
     const db = await getDatabase();
     const res = await db.runAsync(
       `UPDATE documents SET folderId = ?, updatedAt = ? WHERE id = ?`,
-      [folderId, Date.now(), id]
+      sanitizeParams([folderId || null, Date.now(), id])
     );
     return res.changes > 0;
   },
@@ -232,6 +235,7 @@ export const documentRepository = {
    * Toggles the favorite status of a document.
    */
   async toggleFavorite(id: string): Promise<boolean> {
+    if (!id) return false;
     const db = await getDatabase();
     const doc = await this.getById(id);
     if (!doc) return false;
@@ -239,7 +243,7 @@ export const documentRepository = {
     const newFav = !doc.favorite;
     await db.runAsync(
       `UPDATE documents SET favorite = ?, updatedAt = ? WHERE id = ?`,
-      [newFav ? 1 : 0, Date.now(), id]
+      sanitizeParams([newFav ? 1 : 0, Date.now(), id])
     );
     return newFav;
   },
@@ -248,8 +252,9 @@ export const documentRepository = {
    * Deletes a document from SQLite.
    */
   async delete(id: string): Promise<boolean> {
+    if (!id) return false;
     const db = await getDatabase();
-    const res = await db.runAsync(`DELETE FROM documents WHERE id = ?`, [id]);
+    const res = await db.runAsync(`DELETE FROM documents WHERE id = ?`, sanitizeParams([id]));
     return res.changes > 0;
   },
 
@@ -266,10 +271,11 @@ export const documentRepository = {
    * Checks if a document with identical title exists.
    */
   async findByTitle(title: string): Promise<VaultDocument | null> {
+    if (!title) return null;
     const db = await getDatabase();
     const row = await db.getFirstAsync<any>(
       `SELECT * FROM documents WHERE LOWER(title) = LOWER(?)`,
-      [title.trim()]
+      sanitizeParams([title.trim()])
     );
     if (!row) return null;
     return this.mapRowToDocument(row);
@@ -302,6 +308,7 @@ export const documentRepository = {
   },
 
   async getFolderById(id: string): Promise<DocumentFolder | null> {
+    if (!id) return null;
     const db = await getDatabase();
     const row = await db.getFirstAsync<any>(
       `SELECT 
@@ -311,7 +318,7 @@ export const documentRepository = {
        LEFT JOIN documents d ON f.id = d.folderId
        WHERE f.id = ?
        GROUP BY f.id`,
-      [id]
+      sanitizeParams([id])
     );
     if (!row) return null;
     return {
@@ -339,26 +346,28 @@ export const documentRepository = {
     const folderColor = folder.color || '#4F46E5';
     await db.runAsync(
       `INSERT INTO document_folders (id, name, color, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)`,
-      [folder.id, folder.name, folderColor, folder.createdAt, folder.updatedAt]
+      sanitizeParams([folder.id, folder.name, folderColor, folder.createdAt, folder.updatedAt])
     );
 
     return folder;
   },
 
   async updateFolder(id: string, name: string, color?: string): Promise<boolean> {
+    if (!id) return false;
     const db = await getDatabase();
     const res = await db.runAsync(
       `UPDATE document_folders SET name = ?, color = COALESCE(?, color), updatedAt = ? WHERE id = ?`,
-      [name.trim(), color ?? null, Date.now(), id]
+      sanitizeParams([name.trim(), color ?? null, Date.now(), id])
     );
     return res.changes > 0;
   },
 
   async deleteFolder(id: string): Promise<boolean> {
+    if (!id) return false;
     const db = await getDatabase();
     // Nullify folderId for contained documents so documents aren't lost
-    await db.runAsync(`UPDATE documents SET folderId = NULL WHERE folderId = ?`, [id]);
-    const res = await db.runAsync(`DELETE FROM document_folders WHERE id = ?`, [id]);
+    await db.runAsync(`UPDATE documents SET folderId = NULL WHERE folderId = ?`, sanitizeParams([id]));
+    const res = await db.runAsync(`DELETE FROM document_folders WHERE id = ?`, sanitizeParams([id]));
     return res.changes > 0;
   },
 

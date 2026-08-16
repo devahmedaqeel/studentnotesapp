@@ -1,10 +1,22 @@
 export type ConnectionStatus =
   | 'none'
   | 'requested'
+  | 'request_sent'
+  | 'request_received'
   | 'following'
   | 'follow_back'
   | 'connected'
-  | 'blocked';
+  | 'friends'
+  | 'blocked'
+  | 'blocked_by_me'
+  | 'blocked_by_them';
+
+export interface ConnectionCounts {
+  friendsCount: number;
+  requestsCount: number;
+  sentCount: number;
+  unreadCount: number;
+}
 
 export type MessageType =
   | 'text'

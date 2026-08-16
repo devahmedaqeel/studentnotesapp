@@ -149,10 +149,17 @@ export const CreateDiaryEventScreen: React.FC<Props> = ({ navigation, route }) =
       };
 
       if (isEditing && eventId) {
+        const existing = await diaryRepository.getById(eventId);
+        if (existing?.notificationIds) {
+          await notificationService.cancelReminders(existing.notificationIds);
+        }
+
         const updated = await diaryRepository.update(eventId, eventPayload, attachments);
         if (updated && updated.reminderEnabled) {
           const notifIds = await notificationService.scheduleEventReminders(updated);
           await diaryRepository.update(eventId, { notificationIds: notifIds });
+        } else {
+          await diaryRepository.update(eventId, { notificationIds: [] });
         }
         Alert.alert('Updated', 'Academic deadline updated successfully!');
       } else {

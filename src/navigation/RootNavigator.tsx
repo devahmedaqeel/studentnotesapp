@@ -12,6 +12,9 @@ import { RegisterScreen } from '../screens/auth/RegisterScreen';
 import { ForgotPasswordScreen } from '../screens/auth/ForgotPasswordScreen';
 import { OtpVerificationScreen } from '../screens/auth/OtpVerificationScreen';
 import { ResetPasswordScreen } from '../screens/auth/ResetPasswordScreen';
+import { TermsPrivacyConsentScreen } from '../screens/auth/TermsPrivacyConsentScreen';
+import { TermsAndConditionsScreen } from '../screens/auth/TermsAndConditionsScreen';
+import { PrivacyPolicyScreen } from '../screens/auth/PrivacyPolicyScreen';
 import { ProfileSetupScreen } from '../screens/profile/ProfileSetupScreen';
 import { ProfileScreen } from '../screens/profile/ProfileScreen';
 import { EditProfileScreen } from '../screens/profile/EditProfileScreen';
@@ -42,13 +45,17 @@ import { TodayScheduleScreen } from '../screens/diary/TodayScheduleScreen';
 import { MyTimetableScreen } from '../screens/timetable/MyTimetableScreen';
 import { AddClassScreen } from '../screens/timetable/AddClassScreen';
 import { TimetableSettingsScreen } from '../screens/timetable/TimetableSettingsScreen';
+import { SavedLinksScreen } from '../screens/links/SavedLinksScreen';
+import { SaveLinkScreen } from '../screens/links/SaveLinkScreen';
 import { InboxScreen } from '../screens/connect/InboxScreen';
 import { StudentSearchScreen } from '../screens/connect/StudentSearchScreen';
 import { StudentProfileScreen } from '../screens/connect/StudentProfileScreen';
 import { ChatScreen } from '../screens/connect/ChatScreen';
+import { MyFriendsScreen } from '../screens/connect/MyFriendsScreen';
 import { FollowersScreen } from '../screens/connect/FollowersScreen';
 import { FollowingScreen } from '../screens/connect/FollowingScreen';
 import { FollowRequestsScreen } from '../screens/connect/FollowRequestsScreen';
+import { SentRequestsScreen } from '../screens/connect/SentRequestsScreen';
 import { CreateStatusScreen } from '../screens/connect/CreateStatusScreen';
 import { StatusViewerScreen } from '../screens/connect/StatusViewerScreen';
 import { UsernameSettingsScreen } from '../screens/profile/UsernameSettingsScreen';
@@ -58,9 +65,15 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const RootNavigator: React.FC = () => {
   const { theme } = useTheme();
-  const { hasChosenMode, session, isProfileComplete } = useAuth();
+  const { hasAcceptedTerms, hasChosenMode, session, isProfileComplete, pendingPasswordReset } = useAuth();
 
   const getInitialRoute = (): keyof RootStackParamList => {
+    if (!hasAcceptedTerms) {
+      return 'TermsPrivacyConsent';
+    }
+    if (pendingPasswordReset) {
+      return 'ResetPassword';
+    }
     if (session?.user) {
       return isProfileComplete ? 'MainTabs' : 'ProfileSetup';
     }
@@ -79,6 +92,11 @@ export const RootNavigator: React.FC = () => {
         animation: 'slide_from_right',
       }}
     >
+      {/* Onboarding & Legal Stack */}
+      <Stack.Screen name="TermsPrivacyConsent" component={TermsPrivacyConsentScreen} />
+      <Stack.Screen name="TermsAndConditions" component={TermsAndConditionsScreen} />
+      <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
+
       {/* Auth & Profile Stack */}
       <Stack.Screen name="Welcome" component={WelcomeScreen} />
       <Stack.Screen name="Login" component={LoginScreen} />
@@ -119,15 +137,19 @@ export const RootNavigator: React.FC = () => {
       <Stack.Screen name="MyTimetable" component={MyTimetableScreen} />
       <Stack.Screen name="AddClass" component={AddClassScreen} />
       <Stack.Screen name="TimetableSettings" component={TimetableSettingsScreen} />
+      <Stack.Screen name="SavedLinks" component={SavedLinksScreen} />
+      <Stack.Screen name="SaveLink" component={SaveLinkScreen} />
       
       {/* Connect Screens */}
       <Stack.Screen name="Inbox" component={InboxScreen} />
       <Stack.Screen name="StudentSearch" component={StudentSearchScreen} />
       <Stack.Screen name="StudentProfile" component={StudentProfileScreen} />
       <Stack.Screen name="Chat" component={ChatScreen} />
+      <Stack.Screen name="MyFriends" component={MyFriendsScreen} />
       <Stack.Screen name="Followers" component={FollowersScreen} />
       <Stack.Screen name="Following" component={FollowingScreen} />
       <Stack.Screen name="FollowRequests" component={FollowRequestsScreen} />
+      <Stack.Screen name="SentRequests" component={SentRequestsScreen} />
       <Stack.Screen name="CreateStatus" component={CreateStatusScreen} />
       <Stack.Screen name="StatusViewer" component={StatusViewerScreen} />
       <Stack.Screen name="UsernameSettings" component={UsernameSettingsScreen} />

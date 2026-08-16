@@ -11,8 +11,25 @@ import {
   OutgoingQueuedMessage,
 } from '../types/connect';
 import * as FileSystem from 'expo-file-system/legacy';
+import { base64ToArrayBuffer } from '../utils/binary';
 
 export const chatService = {
+  async ensureRemoteConversation(conversationId: string, userIdA: string, userIdB: string): Promise<void> {
+    await supabase.from('chat_conversations').upsert({
+      id: conversationId,
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    });
+
+    await supabase.from('chat_conversation_members').upsert(
+      [
+        { conversation_id: conversationId, user_id: userIdA },
+        { conversation_id: conversationId, user_id: userIdB },
+      ],
+      { onConflict: 'conversation_id,user_id' }
+    );
+  },
+
   /**
    * Retrieves all conversations for the current student.
    */
@@ -55,6 +72,62 @@ export const chatService = {
     return `conv_${sorted}`;
   },
 
+  getAttachmentExtension(msg: Pick<ChatMessage, 'messageType' | 'attachmentName'>): string {
+    const fromName = msg.attachmentName?.split('.').pop()?.toLowerCase();
+    if (fromName && fromName.length <= 8) return fromName;
+    if (msg.messageType === 'image') return 'jpg';
+    if (msg.messageType === 'pdf') return 'pdf';
+    if (msg.messageType === 'voice') return 'm4a';
+    return 'dat';
+  },
+
+  async resolveAttachmentPath(msg: ChatMessage): Promise<string | undefined> {
+    if (!msg.attachmentPath) return undefined;
+
+    try {
+      if (msg.attachmentPath.startsWith('file://')) {
+        const info = await FileSystem.getInfoAsync(msg.attachmentPath);
+        if (info.exists) return msg.attachmentPath;
+      }
+
+      if (msg.attachmentPath.startsWith('http://') || msg.attachmentPath.startsWith('https://')) {
+        return msg.attachmentPath;
+      }
+
+      const secretKey = await e2eeService.deriveConversationKey(msg.senderId, msg.recipientId);
+      const { data, error } = await supabase.storage
+        .from('chat-attachments')
+        .createSignedUrl(msg.attachmentPath, 3600);
+
+      if (error || !data?.signedUrl) {
+        return msg.attachmentPath;
+      }
+
+      const downloadDir = `${FileSystem.cacheDirectory || ''}chat_attachments/`;
+      const dirInfo = await FileSystem.getInfoAsync(downloadDir);
+      if (!dirInfo.exists) {
+        await FileSystem.makeDirectoryAsync(downloadDir, { intermediates: true });
+      }
+
+      const encryptedLocalUri = `${downloadDir}${msg.id}.dat`;
+      const downloaded = await FileSystem.downloadAsync(data.signedUrl, encryptedLocalUri);
+      if (downloaded.status !== 200) {
+        return msg.attachmentPath;
+      }
+
+      return await e2eeService.decryptFile(
+        downloaded.uri,
+        secretKey,
+        msg.iv,
+        msg.hmac,
+        this.getAttachmentExtension(msg)
+      );
+    } catch (e) {
+      console.warn('Failed to resolve chat attachment:', e);
+      return msg.attachmentPath;
+    }
+  },
+
   /**
    * Loads message history for a conversation.
    */
@@ -87,7 +160,7 @@ export const chatService = {
         }
       }
 
-      messages.push({
+      const msg: ChatMessage = {
         id: r.id,
         conversationId: r.conversationId,
         senderId: r.senderId,
@@ -108,7 +181,13 @@ export const chatService = {
         isDeleted: Boolean(r.isDeleted),
         createdAt: Number(r.createdAt),
         editedAt: r.editedAt ? Number(r.editedAt) : undefined,
-      });
+      };
+
+      if (msg.attachmentPath && msg.senderId !== msg.recipientId) {
+        msg.attachmentPath = await this.resolveAttachmentPath(msg);
+      }
+
+      messages.push(msg);
     }
 
     return messages.reverse(); // Chronological order
@@ -178,6 +257,7 @@ export const chatService = {
 
     // 5. Transmit ciphertext to Supabase cloud (never plaintext!)
     try {
+      await this.ensureRemoteConversation(conversationId, senderId, recipientId);
       await supabase.from('chat_messages').insert({
         id: msgId,
         conversation_id: conversationId,
@@ -254,7 +334,7 @@ export const chatService = {
       });
       await supabase.storage
         .from('chat-attachments')
-        .upload(storagePath, Buffer.from(base64Cipher, 'base64'), {
+        .upload(storagePath, base64ToArrayBuffer(base64Cipher), {
           contentType: 'application/octet-stream',
           upsert: true,
         });
@@ -294,6 +374,7 @@ export const chatService = {
 
     // Transmit ciphertext record
     try {
+      await this.ensureRemoteConversation(conversationId, senderId, recipientId);
       await supabase.from('chat_messages').insert({
         id: msgId,
         conversation_id: conversationId,
@@ -361,7 +442,7 @@ export const chatService = {
       });
       await supabase.storage
         .from('chat-attachments')
-        .upload(storagePath, Buffer.from(base64Cipher, 'base64'), {
+        .upload(storagePath, base64ToArrayBuffer(base64Cipher), {
           contentType: 'application/octet-stream',
           upsert: true,
         });
@@ -411,6 +492,7 @@ export const chatService = {
 
     // Transmit ciphertext record
     try {
+      await this.ensureRemoteConversation(conversationId, senderId, recipientId);
       await supabase.from('chat_messages').insert({
         id: msgId,
         conversation_id: conversationId,
@@ -461,12 +543,15 @@ export const chatService = {
       const title = msg.attachmentName || `Shared_${msg.messageType}_${Date.now()}`;
       const ext = msg.messageType === 'pdf' ? 'pdf' : 'docx';
 
+      const resolvedPath = await this.resolveAttachmentPath(msg);
+      if (!resolvedPath) return { success: false };
+
       const doc = await documentRepository.create({
         id: generateId('doc_'),
         userId,
         title,
         originalFileName: msg.attachmentName || title,
-        filePath: msg.attachmentPath,
+        filePath: resolvedPath,
         fileType: ext as any,
         mimeType: ext === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         fileSizeBytes: msg.attachmentSize || 0,
@@ -543,10 +628,12 @@ export const chatService = {
 
     for (const q of queued) {
       try {
+        const senderId = myUserId;
+        await this.ensureRemoteConversation(q.conversationId, senderId, q.recipientId);
         await supabase.from('chat_messages').insert({
           id: q.id,
           conversation_id: q.conversationId,
-          sender_id: myUserId,
+          sender_id: senderId,
           recipient_id: q.recipientId,
           message_type: q.messageType,
           ciphertext: q.ciphertext,

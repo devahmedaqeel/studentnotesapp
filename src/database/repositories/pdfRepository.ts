@@ -1,4 +1,4 @@
-import { getDatabase } from '../database';
+import { getDatabase, sanitizeParams } from '../database';
 import { PdfDocument, UpdatePdfInput } from '../../types/pdf';
 import { generateId } from '../../utils/id';
 
@@ -32,6 +32,7 @@ export const pdfRepository = {
   },
 
   async getBySubject(subjectId: string, folderId?: string | null): Promise<PdfDocument[]> {
+    if (!subjectId) return [];
     const db = await getDatabase();
     let query = `
       SELECT 
@@ -56,7 +57,7 @@ export const pdfRepository = {
 
     query += ` ORDER BY p.updatedAt DESC`;
 
-    const rows = await db.getAllAsync<any>(query, params);
+    const rows = await db.getAllAsync<any>(query, sanitizeParams(params));
     return rows.map((r) => ({
       id: r.id,
       subjectId: r.subjectId,
@@ -73,6 +74,7 @@ export const pdfRepository = {
   },
 
   async getById(id: string): Promise<PdfDocument | null> {
+    if (!id) return null;
     const db = await getDatabase();
     const r = await db.getFirstAsync<any>(
       `
@@ -85,7 +87,7 @@ export const pdfRepository = {
       LEFT JOIN folders f ON p.folderId = f.id
       WHERE p.id = ?
       `,
-      [id]
+      sanitizeParams([id])
     );
 
     if (!r) return null;
@@ -149,7 +151,7 @@ export const pdfRepository = {
     await db.runAsync(
       `INSERT INTO pdfs (id, subjectId, folderId, title, filePath, pageCount, favorite, createdAt, updatedAt)
        VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`,
-      [id, pdf.subjectId, pdf.folderId || null, pdf.title, pdf.filePath, pdf.pageCount, now, now]
+      sanitizeParams([id, pdf.subjectId, pdf.folderId || null, pdf.title || 'Untitled PDF', pdf.filePath, pdf.pageCount || 1, now, now])
     );
 
     const created = await this.getById(id);
@@ -160,6 +162,7 @@ export const pdfRepository = {
   },
 
   async update(id: string, input: UpdatePdfInput): Promise<PdfDocument | null> {
+    if (!id) return null;
     const db = await getDatabase();
     const existing = await this.getById(id);
     if (!existing) return null;
@@ -172,13 +175,14 @@ export const pdfRepository = {
 
     await db.runAsync(
       `UPDATE pdfs SET title = ?, subjectId = ?, folderId = ?, favorite = ?, updatedAt = ? WHERE id = ?`,
-      [title, subjectId, folderId || null, favorite, now, id]
+      sanitizeParams([title, subjectId, folderId || null, favorite, now, id])
     );
 
     return this.getById(id);
   },
 
   async toggleFavorite(id: string): Promise<boolean> {
+    if (!id) return false;
     const existing = await this.getById(id);
     if (!existing) return false;
     await this.update(id, { favorite: !existing.favorite });
@@ -186,8 +190,10 @@ export const pdfRepository = {
   },
 
   async delete(id: string): Promise<boolean> {
+    if (!id) return false;
     const db = await getDatabase();
-    const result = await db.runAsync(`DELETE FROM pdfs WHERE id = ?`, [id]);
+    const result = await db.runAsync(`DELETE FROM pdfs WHERE id = ?`, sanitizeParams([id]));
     return result.changes > 0;
   },
 };
+

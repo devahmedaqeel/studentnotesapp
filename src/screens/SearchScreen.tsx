@@ -9,13 +9,15 @@ import { SubjectCard } from '../components/subjects/SubjectCard';
 import { FolderCard } from '../components/folders/FolderCard';
 import { NoteCard } from '../components/notes/NoteCard';
 import { PdfCard } from '../components/pdf/PdfCard';
+import { ResourceCard } from '../components/links/ResourceCard';
 import { EmptyState } from '../components/common/EmptyState';
 import { LoadingState } from '../components/common/LoadingState';
+import { FloatingProfileButton } from '../components/common/FloatingProfileButton';
 import { useSearch } from '../hooks/useSearch';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MainTabs'>;
 
-type FilterCategory = 'all' | 'subjects' | 'folders' | 'notes' | 'pdfs';
+type FilterCategory = 'all' | 'subjects' | 'folders' | 'notes' | 'pdfs' | 'links';
 
 export const SearchScreen: React.FC<Props> = ({ navigation }) => {
   const { theme } = useTheme();
@@ -26,7 +28,8 @@ export const SearchScreen: React.FC<Props> = ({ navigation }) => {
     results.subjects.length +
     results.folders.length +
     results.notes.length +
-    results.pdfs.length;
+    results.pdfs.length +
+    (results.links ? results.links.length : 0);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -44,7 +47,7 @@ export const SearchScreen: React.FC<Props> = ({ navigation }) => {
 
       {query.length > 0 && (
         <View style={styles.filterRow}>
-          {(['all', 'subjects', 'folders', 'notes', 'pdfs'] as FilterCategory[]).map((cat) => (
+          {(['all', 'subjects', 'folders', 'notes', 'pdfs', 'links'] as FilterCategory[]).map((cat) => (
             <TouchableOpacity
               key={cat}
               style={[
@@ -62,7 +65,7 @@ export const SearchScreen: React.FC<Props> = ({ navigation }) => {
                   { color: filter === cat ? '#FFFFFF' : theme.colors.textSecondary, textTransform: 'capitalize' },
                 ]}
               >
-                {cat}
+                {cat === 'links' ? 'Saved Links' : cat}
               </Text>
             </TouchableOpacity>
           ))}
@@ -159,8 +162,29 @@ export const SearchScreen: React.FC<Props> = ({ navigation }) => {
               ))}
             </View>
           )}
+
+          {/* Saved Links Results */}
+          {(filter === 'all' || filter === 'links') && results.links && results.links.length > 0 && (
+            <View style={styles.section}>
+              <Text style={[theme.typography.h3, { color: theme.colors.text, marginBottom: 8 }]}>
+                Saved Links ({results.links.length})
+              </Text>
+              {results.links.map((link) => (
+                <ResourceCard
+                  key={link.id}
+                  link={link}
+                  onEdit={() =>
+                    (navigation.getParent() as any)?.navigate('SaveLink', { linkId: link.id })
+                  }
+                />
+              ))}
+            </View>
+          )}
         </ScrollView>
       )}
+
+      {/* Floating Profile Access Button */}
+      <FloatingProfileButton bottomOffset={20} />
     </View>
   );
 };

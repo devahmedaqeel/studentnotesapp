@@ -5,6 +5,7 @@ import { noteRepository } from '../database/repositories/noteRepository';
 import { pdfRepository } from '../database/repositories/pdfRepository';
 import { connectService } from './connectService';
 import * as FileSystem from 'expo-file-system/legacy';
+import { base64ToArrayBuffer } from '../utils/binary';
 
 export const profileService = {
   async getProfile(userId: string): Promise<StudentProfile | null> {
@@ -97,7 +98,7 @@ export const profileService = {
 
       const { data, error } = await supabase.storage
         .from('avatars')
-        .upload(storagePath, Buffer.from(base64, 'base64'), {
+        .upload(storagePath, base64ToArrayBuffer(base64), {
           contentType: 'image/jpeg',
           upsert: true,
         });

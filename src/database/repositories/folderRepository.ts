@@ -1,4 +1,4 @@
-import { getDatabase } from '../database';
+import { getDatabase, sanitizeParams } from '../database';
 import { Folder, CreateFolderInput, UpdateFolderInput } from '../../types/folder';
 import { generateId } from '../../utils/id';
 
@@ -28,6 +28,7 @@ export const folderRepository = {
   },
 
   async getBySubjectId(subjectId: string): Promise<Folder[]> {
+    if (!subjectId) return [];
     const db = await getDatabase();
     const rows = await db.getAllAsync<any>(
       `
@@ -39,7 +40,7 @@ export const folderRepository = {
       WHERE f.subjectId = ?
       ORDER BY f.name ASC
       `,
-      [subjectId]
+      sanitizeParams([subjectId])
     );
 
     return rows.map((r) => ({
@@ -54,6 +55,7 @@ export const folderRepository = {
   },
 
   async getById(id: string): Promise<Folder | null> {
+    if (!id) return null;
     const db = await getDatabase();
     const r = await db.getFirstAsync<any>(
       `
@@ -64,7 +66,7 @@ export const folderRepository = {
       FROM folders f
       WHERE f.id = ?
       `,
-      [id]
+      sanitizeParams([id])
     );
 
     if (!r) return null;
@@ -86,7 +88,7 @@ export const folderRepository = {
 
     await db.runAsync(
       `INSERT INTO folders (id, subjectId, name, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)`,
-      [id, input.subjectId, input.name, now, now]
+      sanitizeParams([id, input.subjectId, (input.name || 'Untitled Folder').trim(), now, now])
     );
 
     return {
@@ -101,19 +103,22 @@ export const folderRepository = {
   },
 
   async update(id: string, input: UpdateFolderInput): Promise<Folder | null> {
+    if (!id) return null;
     const db = await getDatabase();
     const now = Date.now();
     await db.runAsync(
       `UPDATE folders SET name = ?, updatedAt = ? WHERE id = ?`,
-      [input.name, now, id]
+      sanitizeParams([input.name.trim(), now, id])
     );
 
     return this.getById(id);
   },
 
   async delete(id: string): Promise<boolean> {
+    if (!id) return false;
     const db = await getDatabase();
-    const result = await db.runAsync(`DELETE FROM folders WHERE id = ?`, [id]);
+    const result = await db.runAsync(`DELETE FROM folders WHERE id = ?`, sanitizeParams([id]));
     return result.changes > 0;
   },
 };
+

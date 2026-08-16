@@ -21,6 +21,7 @@ export const ResetPasswordScreen: React.FC<Props> = ({ navigation }) => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isSessionExpired, setIsSessionExpired] = useState(false);
 
   const handleUpdatePassword = async () => {
     if (!newPassword.trim() || newPassword.length < 6) {
@@ -34,6 +35,7 @@ export const ResetPasswordScreen: React.FC<Props> = ({ navigation }) => {
     }
 
     setErrorMsg(null);
+    setIsSessionExpired(false);
     setLoading(true);
     const result = await resetPasswordWithNewPassword(newPassword);
     setLoading(false);
@@ -41,7 +43,7 @@ export const ResetPasswordScreen: React.FC<Props> = ({ navigation }) => {
     if (result.success) {
       Alert.alert(
         'Password Updated',
-        'Password updated successfully. You can now sign in with your new password.',
+        'Your password has been updated successfully. Please sign in with your new password.',
         [
           {
             text: 'Sign In',
@@ -50,7 +52,12 @@ export const ResetPasswordScreen: React.FC<Props> = ({ navigation }) => {
         ]
       );
     } else {
-      setErrorMsg(result.error || 'Failed to update password. Please try again.');
+      const isExpired =
+        result.error?.toLowerCase().includes('expired') ||
+        result.error?.toLowerCase().includes('invalid') ||
+        result.error?.toLowerCase().includes('session');
+      setIsSessionExpired(Boolean(isExpired));
+      setErrorMsg(result.error || 'Failed to update password. Please request a new reset email.');
     }
   };
 
@@ -113,6 +120,17 @@ export const ResetPasswordScreen: React.FC<Props> = ({ navigation }) => {
           size="large"
           style={{ marginTop: 16 }}
         />
+
+        {isSessionExpired && (
+          <AppButton
+            title="Request New Reset Email"
+            onPress={() => navigation.replace('ForgotPassword')}
+            variant="outline"
+            size="large"
+            icon="mail-outline"
+            style={{ marginTop: 12 }}
+          />
+        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );

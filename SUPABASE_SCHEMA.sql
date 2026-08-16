@@ -124,6 +124,7 @@ create table if not exists public.pdfs (
   id text not null,
   user_id uuid references auth.users(id) on delete cascade not null,
   subject_id text not null,
+  folder_id text,
   title text not null,
   file_url text not null,
   page_count integer default 1,
@@ -133,6 +134,8 @@ create table if not exists public.pdfs (
   updated_at bigint not null,
   primary key (id, user_id)
 );
+
+alter table public.pdfs add column if not exists folder_id text;
 
 alter table public.pdfs enable row level security;
 
@@ -335,8 +338,17 @@ create policy "Members manage conversations" on public.chat_conversations
     where conversation_id = public.chat_conversations.id and user_id = auth.uid()
   ));
 
+create policy "Authenticated users can create conversations" on public.chat_conversations
+  for insert with check (auth.role() = 'authenticated');
+
 create policy "Members view membership" on public.chat_conversation_members
   for all using (user_id = auth.uid());
+
+create policy "Users can insert own conversation membership" on public.chat_conversation_members
+  for insert with check (user_id = auth.uid());
+
+create policy "Authenticated users can create conversation memberships" on public.chat_conversation_members
+  for insert with check (auth.role() = 'authenticated');
 
 -- 17. CHAT MESSAGES TABLE (CIPHERTEXT ONLY)
 create table if not exists public.chat_messages (
@@ -412,12 +424,15 @@ create table if not exists public.chat_reports (
 
 create table if not exists public.user_privacy_settings (
   user_id uuid references auth.users(id) on delete cascade primary key,
+  hide_followers_following boolean default false,
   show_online_status boolean default true,
   show_last_seen boolean default true,
   read_receipts boolean default true,
   status_visibility text default 'connections',
   updated_at bigint not null
 );
+
+alter table public.user_privacy_settings add column if not exists hide_followers_following boolean default false;
 
 alter table public.chat_reports enable row level security;
 alter table public.user_privacy_settings enable row level security;
@@ -427,6 +442,9 @@ create policy "Users create reports" on public.chat_reports
 
 create policy "Users manage privacy settings" on public.user_privacy_settings
   for all using (auth.uid() = user_id);
+
+create policy "Users can read other users privacy settings" on public.user_privacy_settings
+  for select using (auth.role() = 'authenticated');
 
 -- STORAGE BUCKETS POLICIES
 -- Note: Buckets 'note-files', 'pdf-files', 'avatars', 'documents', 'chat-attachments' in Storage

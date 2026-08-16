@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Alert, Switch } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import { useTheme } from '../hooks/useTheme';
@@ -12,6 +12,7 @@ import { noteRepository } from '../database/repositories/noteRepository';
 import { pdfRepository } from '../database/repositories/pdfRepository';
 import { fileService } from '../services/fileService';
 import { syncService } from '../services/syncService';
+import { privacyService } from '../services/privacyService';
 import { formatFileSize } from '../utils/file';
 import { ThemeMode } from '../types/common';
 import { AVATAR_PRESETS } from '../components/common/AvatarSelector';
@@ -29,6 +30,7 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   const [usedStorage, setUsedStorage] = useState('0 B');
   const [lastSynced, setLastSynced] = useState<string | null>(null);
   const [refreshingStats, setRefreshingStats] = useState(false);
+  const [hideFollowers, setHideFollowers] = useState(false);
 
   const fetchStats = async () => {
     setRefreshingStats(true);
@@ -42,6 +44,11 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
       setPdfCount(pdfs.length);
       setUsedStorage(formatFileSize(bytes));
       setLastSynced(syncTime ? new Date(syncTime).toLocaleString() : 'Never synced');
+
+      if (user?.id) {
+        const priv = await privacyService.getPrivacySettings(user.id);
+        setHideFollowers(priv.hideFollowersFollowing);
+      }
     } catch (err) {
       console.error('Stats error:', err);
     } finally {
@@ -51,7 +58,14 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
 
   useEffect(() => {
     fetchStats();
-  }, [syncing]);
+  }, [syncing, user?.id]);
+
+  const handleToggleHideFollowers = async (val: boolean) => {
+    setHideFollowers(val);
+    if (user?.id) {
+      await privacyService.updatePrivacySettings(user.id, { hideFollowersFollowing: val });
+    }
+  };
 
   const handleSyncNow = async () => {
     const ok = await syncNow();
@@ -81,7 +95,7 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
         <TouchableOpacity
           activeOpacity={0.85}
           style={[styles.cardItem, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
-          onPress={() => (navigation.getParent() as any)?.navigate('ProfileSetup', { isEditing: true })}
+          onPress={() => (navigation.getParent() as any)?.navigate('Profile')}
         >
           <View style={styles.cardLeft}>
             <View
@@ -191,6 +205,44 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
           </View>
           <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
         </TouchableOpacity>
+
+        {/* Privacy & Security Section */}
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
+            PRIVACY & SECURITY
+          </Text>
+        </View>
+
+        {/* Hide Followers & Following Switch */}
+        <View
+          style={[
+            styles.cardItem,
+            { backgroundColor: theme.colors.card, borderColor: theme.colors.border, justifyContent: 'space-between' },
+          ]}
+        >
+          <View style={styles.cardLeft}>
+            <View
+              style={[
+                styles.settingIconBox,
+                { backgroundColor: isDark ? 'rgba(99, 102, 241, 0.2)' : 'rgba(99, 102, 241, 0.12)' },
+              ]}
+            >
+              <Ionicons name="eye-off-outline" size={16} color={theme.colors.primary} />
+            </View>
+            <View style={styles.cardTextWrapper}>
+              <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Hide Followers & Following</Text>
+              <Text style={[styles.cardSubtitle, { color: theme.colors.textSecondary }]}>
+                Only you can see your followers and following lists
+              </Text>
+            </View>
+          </View>
+          <Switch
+            value={hideFollowers}
+            onValueChange={handleToggleHideFollowers}
+            trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+            thumbColor="#FFFFFF"
+          />
+        </View>
 
         {/* Blocked Students Option */}
         <TouchableOpacity
@@ -413,6 +465,39 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
             <Text style={[styles.refreshBtnText, { color: theme.colors.primary }]}>
               {refreshingStats ? 'Calculating...' : 'Recalculate Storage'}
             </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Legal & Privacy Section */}
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
+            LEGAL & PRIVACY
+          </Text>
+        </View>
+
+        <View style={[styles.cardContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            style={[styles.themeRow, { borderBottomWidth: 1, borderBottomColor: theme.colors.border }]}
+            onPress={() => (navigation.getParent() as any)?.navigate('TermsAndConditions')}
+          >
+            <View style={styles.statLabelGroup}>
+              <Ionicons name="document-text-outline" size={18} color={theme.colors.primary} style={{ marginRight: 10 }} />
+              <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Terms & Conditions</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.7}
+            style={styles.themeRow}
+            onPress={() => (navigation.getParent() as any)?.navigate('PrivacyPolicy')}
+          >
+            <View style={styles.statLabelGroup}>
+              <Ionicons name="shield-checkmark-outline" size={18} color="#10B981" style={{ marginRight: 10 }} />
+              <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Privacy Policy</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
           </TouchableOpacity>
         </View>
       </ScrollView>

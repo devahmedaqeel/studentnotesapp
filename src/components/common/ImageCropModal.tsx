@@ -258,25 +258,31 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
 
   const handleExecuteCrop = async () => {
     try {
-      setProcessing(true);
-
       const actions: ImageManipulator.Action[] = [];
+      const isRotated90or270 = rotation === 90 || rotation === 270;
+      const effWidth = isRotated90or270 ? naturalHeight : naturalWidth;
+      const effHeight = isRotated90or270 ? naturalWidth : naturalHeight;
 
-      // 1. Calculate pixel coordinates directly on natural image dimensions
+      // 1. Calculate pixel coordinates on effective visual dimensions
       const minPctX = Math.min(corners.tl.x, corners.bl.x);
       const maxPctX = Math.max(corners.tr.x, corners.br.x);
       const minPctY = Math.min(corners.tl.y, corners.tr.y);
       const maxPctY = Math.max(corners.bl.y, corners.br.y);
 
-      const originX = Math.max(0, Math.round((minPctX / 100) * naturalWidth));
-      const originY = Math.max(0, Math.round((minPctY / 100) * naturalHeight));
-      const maxX = Math.min(naturalWidth, Math.round((maxPctX / 100) * naturalWidth));
-      const maxY = Math.min(naturalHeight, Math.round((maxPctY / 100) * naturalHeight));
+      const originX = Math.max(0, Math.round((minPctX / 100) * effWidth));
+      const originY = Math.max(0, Math.round((minPctY / 100) * effHeight));
+      const maxX = Math.min(effWidth, Math.round((maxPctX / 100) * effWidth));
+      const maxY = Math.min(effHeight, Math.round((maxPctY / 100) * effHeight));
 
       const cropW = Math.max(50, maxX - originX);
       const cropH = Math.max(50, maxY - originY);
 
-      // Add high-resolution crop action FIRST
+      // 1. Rotate orientation FIRST if requested so crop matches visual display
+      if (rotation !== 0) {
+        actions.push({ rotate: rotation });
+      }
+
+      // 2. Add high-resolution crop action
       actions.push({
         crop: {
           originX,
@@ -285,11 +291,6 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
           height: cropH,
         },
       });
-
-      // 2. Rotate orientation AFTER crop if requested
-      if (rotation !== 0) {
-        actions.push({ rotate: rotation });
-      }
 
       const result = await ImageManipulator.manipulateAsync(activeSourceUri, actions, {
         compress: 0.95,

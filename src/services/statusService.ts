@@ -203,7 +203,6 @@ export const statusService = {
     try {
       await supabase.from('chat_status_views').upsert(
         {
-          id: viewId,
           status_id: statusId,
           viewer_id: viewerId,
           viewed_at: now,

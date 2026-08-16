@@ -139,12 +139,19 @@ export const AddClassScreen: React.FC<Props> = ({ navigation, route }) => {
       };
 
       if (isEditing && classId) {
+        const existing = await timetableRepository.getById(classId);
+        if (existing?.notificationId) {
+          await timetableNotificationService.cancelClassReminder(existing.notificationId);
+        }
+
         const updated = await timetableRepository.update(classId, payload);
         if (updated && updated.reminderEnabled) {
           const notifId = await timetableNotificationService.scheduleClassReminder(updated);
           if (notifId) {
             await timetableRepository.update(classId, { notificationId: notifId });
           }
+        } else {
+          await timetableRepository.update(classId, { notificationId: undefined });
         }
         Alert.alert('Updated', `"${finalSubjectName}" class updated successfully!`);
         navigation.goBack();

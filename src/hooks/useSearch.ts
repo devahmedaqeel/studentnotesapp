@@ -8,13 +8,14 @@ export function useSearch() {
     folders: [],
     notes: [],
     pdfs: [],
+    links: [],
   });
   const [loading, setLoading] = useState(false);
 
   const performSearch = useCallback(async (q: string) => {
     setQuery(q);
     if (!q.trim()) {
-      setResults({ subjects: [], folders: [], notes: [], pdfs: [] });
+      setResults({ subjects: [], folders: [], notes: [], pdfs: [], links: [] });
       setLoading(false);
       return;
     }

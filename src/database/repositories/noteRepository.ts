@@ -1,4 +1,4 @@
-import { getDatabase } from '../database';
+import { getDatabase, sanitizeParams } from '../database';
 import { Note, NotePage, CreateNoteInput, UpdateNoteInput } from '../../types/note';
 import { generateId } from '../../utils/id';
 
@@ -31,6 +31,7 @@ export const noteRepository = {
   },
 
   async getBySubject(subjectId: string, folderId?: string | null): Promise<Note[]> {
+    if (!subjectId) return [];
     const db = await getDatabase();
     let query = `
       SELECT 
@@ -55,7 +56,7 @@ export const noteRepository = {
 
     query += ` ORDER BY n.updatedAt DESC`;
 
-    const rows = await db.getAllAsync<any>(query, params);
+    const rows = await db.getAllAsync<any>(query, sanitizeParams(params));
     return rows.map((r) => ({
       id: r.id,
       subjectId: r.subjectId,
@@ -71,6 +72,7 @@ export const noteRepository = {
   },
 
   async getById(id: string): Promise<Note | null> {
+    if (!id) return null;
     const db = await getDatabase();
     const r = await db.getFirstAsync<any>(
       `
@@ -157,20 +159,21 @@ export const noteRepository = {
     const db = await getDatabase();
     const noteId = customId || generateId('note');
     const now = Date.now();
-    const thumbnailPath = input.pageFilePaths.length > 0 ? input.pageFilePaths[0] : null;
+    const thumbnailPath = input.pageFilePaths && input.pageFilePaths.length > 0 ? input.pageFilePaths[0] : null;
 
     await db.runAsync(
       `INSERT INTO notes (id, subjectId, folderId, title, thumbnailPath, favorite, createdAt, updatedAt)
        VALUES (?, ?, ?, ?, ?, 0, ?, ?)`,
-      [noteId, input.subjectId, input.folderId || null, input.title, thumbnailPath, now, now]
+      sanitizeParams([noteId, input.subjectId, input.folderId || null, input.title || 'Untitled Note', thumbnailPath, now, now])
     );
 
     // Insert pages
-    for (let i = 0; i < input.pageFilePaths.length; i++) {
+    const pagePaths = input.pageFilePaths || [];
+    for (let i = 0; i < pagePaths.length; i++) {
       const pageId = generateId('page');
       await db.runAsync(
         `INSERT INTO note_pages (id, noteId, pageNumber, filePath, createdAt) VALUES (?, ?, ?, ?, ?)`,
-        [pageId, noteId, i + 1, input.pageFilePaths[i], now]
+        sanitizeParams([pageId, noteId, i + 1, pagePaths[i], now])
       );
     }
 
@@ -178,6 +181,7 @@ export const noteRepository = {
   },
 
   async update(id: string, input: UpdateNoteInput): Promise<Note | null> {
+    if (!id) return null;
     const db = await getDatabase();
     const existing = await this.getById(id);
     if (!existing) return null;
@@ -190,13 +194,14 @@ export const noteRepository = {
 
     await db.runAsync(
       `UPDATE notes SET title = ?, subjectId = ?, folderId = ?, favorite = ?, updatedAt = ? WHERE id = ?`,
-      [title, subjectId, folderId || null, favorite, now, id]
+      sanitizeParams([title, subjectId, folderId || null, favorite, now, id])
     );
 
     return this.getById(id);
   },
 
   async toggleFavorite(id: string): Promise<boolean> {
+    if (!id) return false;
     const existing = await this.getById(id);
     if (!existing) return false;
     await this.update(id, { favorite: !existing.favorite });
@@ -204,6 +209,7 @@ export const noteRepository = {
   },
 
   async delete(id: string): Promise<boolean> {
+    if (!id) return false;
     const db = await getDatabase();
     await db.runAsync(`DELETE FROM note_pages WHERE noteId = ?`, [id]);
     await db.runAsync(`DELETE FROM note_tags WHERE noteId = ?`, [id]);
@@ -211,3 +217,4 @@ export const noteRepository = {
     return result.changes > 0;
   },
 };
+

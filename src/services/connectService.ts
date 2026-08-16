@@ -703,24 +703,36 @@ export const connectService = {
       [peerUserId, myUserId]
     );
 
-    if (myReq?.status === 'blocked' || peerReq?.status === 'blocked') {
-      return 'blocked';
+    // Check blocked state
+    const iBlocked = await this.isUserBlocked(myUserId, peerUserId);
+    if (iBlocked || myReq?.status === 'blocked') {
+      return 'blocked_by_me';
+    }
+    const peerBlocked = await this.isUserBlocked(peerUserId, myUserId);
+    if (peerBlocked || peerReq?.status === 'blocked') {
+      return 'blocked_by_them';
     }
 
-    // Mutual connection check
+    // 1. Mutual friendship check (both connections accepted)
     if (myReq?.status === 'accepted' && peerReq?.status === 'accepted') {
-      return 'connected';
+      return 'friends';
     }
 
+    // 2. Pending request checks
+    if (myReq?.status === 'pending') {
+      return 'request_sent';
+    }
+
+    if (peerReq?.status === 'pending') {
+      return 'request_received';
+    }
+
+    // 3. One-way follows
     if (myReq?.status === 'accepted') {
       return 'following';
     }
 
-    if (myReq?.status === 'pending') {
-      return 'requested';
-    }
-
-    if (peerReq?.status === 'accepted' || peerReq?.status === 'pending') {
+    if (peerReq?.status === 'accepted') {
       return 'follow_back';
     }
 
@@ -732,7 +744,7 @@ export const connectService = {
    */
   async checkMutualConnection(userIdA: string, userIdB: string): Promise<boolean> {
     const status = await this.getConnectionStatus(userIdA, userIdB);
-    return status === 'connected';
+    return status === 'friends' || status === 'connected';
   },
 
   /**
@@ -751,7 +763,22 @@ export const connectService = {
       [targetUserId, myUserId]
     );
 
-    const initialStatus = incomingReq ? 'accepted' : 'accepted'; // Request-based or direct follow
+    const initialStatus = incomingReq ? 'accepted' : 'pending'; // Auto-accept if following back, else pending
+
+    if (incomingReq && incomingReq.status === 'pending') {
+      // Auto-accept the incoming request as well to establish mutual connection
+      await db.runAsync(
+        `UPDATE student_connections SET status = 'accepted', updatedAt = ?
+         WHERE id = ?`,
+        [now, incomingReq.id]
+      );
+      try {
+        await supabase
+          .from('student_connections')
+          .update({ status: 'accepted', updated_at: now })
+          .eq('id', incomingReq.id);
+      } catch {}
+    }
 
     await db.runAsync(
       `INSERT OR REPLACE INTO student_connections (
@@ -848,27 +875,59 @@ export const connectService = {
   },
 
   /**
-   * Unfollows a student.
+   * Cancels a pending friend request sent by current student.
    */
-  async unfollow(myUserId: string, targetUserId: string): Promise<boolean> {
+  async cancelFriendRequest(myUserId: string, targetUserId: string): Promise<boolean> {
     const db = await getDatabase();
     await db.runAsync(
-      `DELETE FROM student_connections WHERE requesterId = ? AND receiverId = ?`,
+      `DELETE FROM student_connections WHERE requesterId = ? AND receiverId = ? AND status = 'pending'`,
       [myUserId, targetUserId]
     );
-
-    await this.refreshFollowCounts(myUserId);
-    await this.refreshFollowCounts(targetUserId);
 
     try {
       await supabase
         .from('student_connections')
         .delete()
         .eq('requester_id', myUserId)
-        .eq('receiver_id', targetUserId);
+        .eq('receiver_id', targetUserId)
+        .eq('status', 'pending');
     } catch {}
 
+    await this.refreshFollowCounts(myUserId);
+    await this.refreshFollowCounts(targetUserId);
+
     return true;
+  },
+
+  /**
+   * Removes mutual friendship between two students while preserving message history.
+   */
+  async removeFriend(myUserId: string, targetUserId: string): Promise<boolean> {
+    const db = await getDatabase();
+    await db.runAsync(
+      `DELETE FROM student_connections 
+       WHERE (requesterId = ? AND receiverId = ?) OR (requesterId = ? AND receiverId = ?)`,
+      [myUserId, targetUserId, targetUserId, myUserId]
+    );
+
+    try {
+      await supabase
+        .from('student_connections')
+        .delete()
+        .or(`and(requester_id.eq.${myUserId},receiver_id.eq.${targetUserId}),and(requester_id.eq.${targetUserId},receiver_id.eq.${myUserId})`);
+    } catch {}
+
+    await this.refreshFollowCounts(myUserId);
+    await this.refreshFollowCounts(targetUserId);
+
+    return true;
+  },
+
+  /**
+   * Unfollows a student.
+   */
+  async unfollow(myUserId: string, targetUserId: string): Promise<boolean> {
+    return await this.removeFriend(myUserId, targetUserId);
   },
 
   /**
@@ -1040,6 +1099,98 @@ export const connectService = {
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
     }));
+  },
+
+  /**
+   * Retrieves all mutual friends for a user.
+   */
+  async getFriends(userId: string): Promise<StudentConnectProfile[]> {
+    const db = await getDatabase();
+    const rows = await db.getAllAsync<any>(
+      `SELECT p.* FROM student_connections c1
+       JOIN student_connections c2 ON c1.receiverId = c2.requesterId AND c1.requesterId = c2.receiverId
+       JOIN student_profiles p ON c1.receiverId = p.id
+       WHERE c1.requesterId = ? AND c1.status = 'accepted' AND c2.status = 'accepted'
+       ORDER BY c1.updatedAt DESC`,
+      [userId]
+    );
+
+    return rows.map(this.mapRowToProfile);
+  },
+
+  /**
+   * Retrieves pending friend requests sent by a user.
+   */
+  async getSentRequests(userId: string): Promise<StudentConnection[]> {
+    const db = await getDatabase();
+    const rows = await db.getAllAsync<any>(
+      `SELECT c.*, p.username, p.displayName, p.avatarUrl, p.publicStudentId, p.program
+       FROM student_connections c
+       JOIN student_profiles p ON c.receiverId = p.id
+       WHERE c.requesterId = ? AND c.status = 'pending'
+       ORDER BY c.createdAt DESC`,
+      [userId]
+    );
+
+    return rows.map((r) => ({
+      id: r.id,
+      requesterId: r.requesterId,
+      receiverId: r.receiverId,
+      status: r.status,
+      receiverProfile: {
+        id: r.receiverId,
+        username: r.username,
+        displayName: r.displayName,
+        avatarUrl: r.avatarUrl,
+        publicStudentId: r.publicStudentId,
+        program: r.program,
+        followersCount: 0,
+        followingCount: 0,
+        createdAt: 0,
+        updatedAt: 0,
+      },
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+    }));
+  },
+
+  /**
+   * Retrieves real counts for the Connections dashboard.
+   */
+  async getConnectionCounts(userId: string): Promise<{
+    friendsCount: number;
+    requestsCount: number;
+    sentCount: number;
+    unreadCount: number;
+  }> {
+    const db = await getDatabase();
+
+    // 1. Friends count (mutual accepted)
+    const friends = await this.getFriends(userId);
+    
+    // 2. Incoming pending requests count
+    const incomingRows = await db.getAllAsync<any>(
+      `SELECT id FROM student_connections WHERE receiverId = ? AND status = 'pending'`,
+      [userId]
+    );
+
+    // 3. Sent pending requests count
+    const sentRows = await db.getAllAsync<any>(
+      `SELECT id FROM student_connections WHERE requesterId = ? AND status = 'pending'`,
+      [userId]
+    );
+
+    // 4. Unread messages count
+    const unreadRow = await db.getFirstAsync<any>(
+      `SELECT SUM(unreadCount) as totalUnread FROM chat_conversations`
+    );
+
+    return {
+      friendsCount: friends.length,
+      requestsCount: incomingRows.length,
+      sentCount: sentRows.length,
+      unreadCount: unreadRow?.totalUnread || 0,
+    };
   },
 
   /**

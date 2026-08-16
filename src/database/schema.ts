@@ -308,6 +308,38 @@ CREATE TABLE IF NOT EXISTS chat_keys (
   updatedAt INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS user_privacy_settings (
+  userId TEXT PRIMARY KEY,
+  hideFollowersFollowing INTEGER DEFAULT 0,
+  showOnlineStatus INTEGER DEFAULT 1,
+  showLastSeen INTEGER DEFAULT 1,
+  readReceipts INTEGER DEFAULT 1,
+  updatedAt INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS saved_links (
+  id TEXT PRIMARY KEY,
+  userId TEXT,
+  originalUrl TEXT NOT NULL,
+  cleanedUrl TEXT NOT NULL,
+  title TEXT NOT NULL,
+  resourceType TEXT NOT NULL,
+  customType TEXT,
+  domain TEXT NOT NULL,
+  faviconUrl TEXT,
+  previewImageUrl TEXT,
+  description TEXT,
+  subjectId TEXT,
+  subjectName TEXT,
+  category TEXT,
+  tags TEXT,
+  personalNote TEXT,
+  favorite INTEGER DEFAULT 0,
+  createdAt INTEGER NOT NULL,
+  updatedAt INTEGER NOT NULL,
+  FOREIGN KEY (subjectId) REFERENCES subjects(id) ON DELETE SET NULL
+);
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_status_views_unique ON status_views(statusId, viewerId);
 CREATE INDEX IF NOT EXISTS idx_subjects_name ON subjects(name);
 CREATE INDEX IF NOT EXISTS idx_folders_subjectId ON folders(subjectId);
@@ -335,4 +367,9 @@ CREATE INDEX IF NOT EXISTS idx_student_profiles_studentId ON student_profiles(pu
 CREATE INDEX IF NOT EXISTS idx_student_connections_req_rec ON student_connections(requesterId, receiverId);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_conv ON chat_messages(conversationId, createdAt);
 CREATE INDEX IF NOT EXISTS idx_student_statuses_expiry ON student_statuses(expiresAt);
+CREATE INDEX IF NOT EXISTS idx_saved_links_cleanedUrl ON saved_links(cleanedUrl);
+CREATE INDEX IF NOT EXISTS idx_saved_links_resourceType ON saved_links(resourceType);
+CREATE INDEX IF NOT EXISTS idx_saved_links_subjectId ON saved_links(subjectId);
+CREATE INDEX IF NOT EXISTS idx_saved_links_favorite ON saved_links(favorite);
+CREATE INDEX IF NOT EXISTS idx_saved_links_createdAt ON saved_links(createdAt);
 `;

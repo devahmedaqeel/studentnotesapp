@@ -1,4 +1,4 @@
-import { getDatabase } from '../database';
+import { getDatabase, sanitizeParams } from '../database';
 import { TrashItem } from '../../types/common';
 import { generateId } from '../../utils/id';
 
@@ -20,11 +20,11 @@ export const trashRepository = {
     const db = await getDatabase();
     const id = generateId('trash');
     const now = Date.now();
-    const metadataStr = JSON.stringify(item.metadata);
+    const metadataStr = JSON.stringify(item.metadata || {});
 
     await db.runAsync(
       `INSERT INTO trash (id, itemId, itemType, originalPath, metadata, deletedAt) VALUES (?, ?, ?, ?, ?, ?)`,
-      [id, item.itemId, item.itemType, item.originalPath || null, metadataStr, now]
+      sanitizeParams([id, item.itemId, item.itemType, item.originalPath || null, metadataStr, now])
     );
 
     return {
@@ -38,8 +38,9 @@ export const trashRepository = {
   },
 
   async getById(id: string): Promise<TrashItem | null> {
+    if (!id) return null;
     const db = await getDatabase();
-    const r = await db.getFirstAsync<any>(`SELECT * FROM trash WHERE id = ?`, [id]);
+    const r = await db.getFirstAsync<any>(`SELECT * FROM trash WHERE id = ?`, sanitizeParams([id]));
     if (!r) return null;
     return {
       id: r.id,
@@ -52,8 +53,9 @@ export const trashRepository = {
   },
 
   async remove(id: string): Promise<boolean> {
+    if (!id) return false;
     const db = await getDatabase();
-    const result = await db.runAsync(`DELETE FROM trash WHERE id = ?`, [id]);
+    const result = await db.runAsync(`DELETE FROM trash WHERE id = ?`, sanitizeParams([id]));
     return result.changes > 0;
   },
 
@@ -62,3 +64,4 @@ export const trashRepository = {
     await db.runAsync(`DELETE FROM trash`);
   },
 };
+

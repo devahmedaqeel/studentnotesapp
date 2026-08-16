@@ -16,6 +16,7 @@ import { documentRepository } from '../database/repositories/documentRepository'
 import { trashRepository } from '../database/repositories/trashRepository';
 import { shareService } from '../services/shareService';
 import { fileService } from '../services/fileService';
+import { storageService } from '../services/storageService';
 import { PdfDocument } from '../types/pdf';
 import { formatPageCount } from '../utils/formatting';
 
@@ -73,10 +74,35 @@ export const PdfViewerScreen: React.FC<Props> = ({ navigation, route }) => {
       if (data?.pageCount) {
         setTotalPages(data.pageCount);
       }
+
       if (targetPath) {
         try {
-          const b64 = await FileSystem.readAsStringAsync(targetPath, { encoding: 'base64' as any });
-          setPdfBase64(b64.replace(/[\r\n\s]/g, ''));
+          let resolvedLocalPath = targetPath;
+          let fileExists = false;
+
+          const isRemoteUrl = targetPath.startsWith('http://') || targetPath.startsWith('https://');
+
+          // Check if local file exists
+          if (!isRemoteUrl) {
+            const check = await FileSystem.getInfoAsync(targetPath);
+            fileExists = check.exists;
+          } else {
+            fileExists = true;
+          }
+
+          // If local file doesn't exist, download from cloud storage
+          if (!fileExists) {
+            const downloaded = await storageService.downloadPdfToLocal(targetPath);
+            if (downloaded) {
+              resolvedLocalPath = downloaded;
+              fileExists = true;
+            }
+          }
+
+          if (fileExists) {
+            const b64 = await FileSystem.readAsStringAsync(resolvedLocalPath, { encoding: 'base64' as any });
+            setPdfBase64(b64.replace(/[\r\n\s]/g, ''));
+          }
         } catch (e) {
           console.warn('Failed to read PDF base64:', e);
         }

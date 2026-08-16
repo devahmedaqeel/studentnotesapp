@@ -122,7 +122,8 @@ export const PdfCompressionScreen: React.FC<Props> = ({ navigation, route }) => 
   };
 
   // Safe validated percentage (1 - 99)
-  const numericPct = Math.max(1, Math.min(99, parseInt(compressionInput, 10) || 50));
+  const parsedPct = parseInt(compressionInput, 10);
+  const numericPct = isNaN(parsedPct) ? 50 : Math.max(1, Math.min(99, parsedPct));
 
   // Dynamic live calculation
   const originalSize = activeTarget?.size || 0;

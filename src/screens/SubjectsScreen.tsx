@@ -13,6 +13,7 @@ import { ErrorState } from '../components/common/ErrorState';
 import { AppButton } from '../components/common/AppButton';
 import { BottomSheet } from '../components/common/BottomSheet';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
+import { FloatingProfileButton } from '../components/common/FloatingProfileButton';
 import { Subject } from '../types/subject';
 import { fileService } from '../services/fileService';
 
@@ -147,6 +148,9 @@ export const SubjectsScreen: React.FC<Props> = ({ navigation }) => {
         onConfirm={handleDeleteConfirmed}
         onCancel={() => setShowDeleteConfirm(false)}
       />
+
+      {/* Floating Profile Access Button */}
+      <FloatingProfileButton bottomOffset={20} />
     </View>
   );
 };

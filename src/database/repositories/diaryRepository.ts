@@ -1,4 +1,4 @@
-import { getDatabase } from '../database';
+import { getDatabase, sanitizeParams } from '../database';
 import {
   DiaryEvent,
   DiaryAttachment,
@@ -75,7 +75,7 @@ export const diaryRepository = {
         break;
     }
 
-    const rows = await db.getAllAsync<any>(query, params);
+    const rows = await db.getAllAsync<any>(query, sanitizeParams(params));
     const events: DiaryEvent[] = [];
 
     for (const r of rows) {
@@ -90,6 +90,7 @@ export const diaryRepository = {
    * Retrieves a single event by ID including its attachments.
    */
   async getById(id: string): Promise<DiaryEvent | null> {
+    if (!id) return null;
     const db = await getDatabase();
     const row = await db.getFirstAsync<any>(
       `SELECT 
@@ -121,7 +122,7 @@ export const diaryRepository = {
        LEFT JOIN subjects s ON e.subjectId = s.id
        WHERE e.dueDate >= ? AND e.dueDate <= ?
        ORDER BY e.dueTimestamp ASC`,
-      [startDate, endDate]
+      sanitizeParams([startDate, endDate])
     );
 
     return rows.map((r) => this.mapRowToEvent(r, []));
@@ -143,7 +144,7 @@ export const diaryRepository = {
        WHERE e.status != 'completed' AND e.dueTimestamp >= ?
        ORDER BY e.dueTimestamp ASC
        LIMIT ?`,
-      [now - 24 * 60 * 60 * 1000, limit] // include today's deadlines
+      sanitizeParams([now - 24 * 60 * 60 * 1000, limit]) // include today's deadlines
     );
 
     return rows.map((r) => this.mapRowToEvent(r, []));
@@ -153,6 +154,7 @@ export const diaryRepository = {
    * Retrieves events associated with a specific subject.
    */
   async getBySubject(subjectId: string): Promise<DiaryEvent[]> {
+    if (!subjectId) return [];
     const db = await getDatabase();
     const rows = await db.getAllAsync<any>(
       `SELECT 
@@ -163,7 +165,7 @@ export const diaryRepository = {
        LEFT JOIN subjects s ON e.subjectId = s.id
        WHERE e.subjectId = ?
        ORDER BY e.dueTimestamp ASC`,
-      [subjectId]
+      sanitizeParams([subjectId])
     );
 
     return rows.map((r) => this.mapRowToEvent(r, []));
@@ -190,7 +192,7 @@ export const diaryRepository = {
           OR LOWER(COALESCE(s.name, '')) LIKE ? 
           OR LOWER(e.eventType) LIKE ?
        ORDER BY e.dueTimestamp ASC`,
-      [pattern, pattern, pattern, pattern]
+      sanitizeParams([pattern, pattern, pattern, pattern])
     );
 
     return rows.map((r) => this.mapRowToEvent(r, []));
@@ -211,7 +213,7 @@ export const diaryRepository = {
        LEFT JOIN subjects s ON e.subjectId = s.id
        WHERE e.status != 'completed' AND e.dueTimestamp < ?
        ORDER BY e.dueTimestamp ASC`,
-      [now]
+      sanitizeParams([now])
     );
 
     return rows.map((r) => this.mapRowToEvent(r, []));
@@ -237,16 +239,16 @@ export const diaryRepository = {
         isImportant, reminderEnabled, reminderType, dailyUntilCompleted,
         completedAt, notificationIds, createdAt, updatedAt
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
+      sanitizeParams([
         newId,
         event.userId || null,
-        event.title.trim(),
-        event.eventType,
+        (event.title || 'Untitled Event').trim(),
+        event.eventType || 'other',
         event.subjectId || null,
         event.description?.trim() || null,
         event.dueDate,
         event.dueTime || null,
-        event.dueTimestamp,
+        event.dueTimestamp || now,
         event.priority || 'medium',
         event.status || 'upcoming',
         event.isImportant ? 1 : 0,
@@ -257,7 +259,7 @@ export const diaryRepository = {
         notifIdsJson,
         now,
         now,
-      ]
+      ])
     );
 
     // Save attachments
@@ -268,24 +270,24 @@ export const diaryRepository = {
         `INSERT INTO diary_attachments (
           id, eventId, documentId, title, filePath, fileType, fileSizeBytes, createdAt
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
+        sanitizeParams([
           attId,
           newId,
           att.documentId || null,
-          att.title,
+          att.title || 'Attachment',
           att.filePath,
-          att.fileType,
+          att.fileType || 'pdf',
           att.fileSizeBytes || 0,
           now,
-        ]
+        ])
       );
       createdAttachments.push({
         id: attId,
         eventId: newId,
         documentId: att.documentId || null,
-        title: att.title,
+        title: att.title || 'Attachment',
         filePath: att.filePath,
-        fileType: att.fileType,
+        fileType: att.fileType || 'pdf',
         fileSizeBytes: att.fileSizeBytes || 0,
         createdAt: now,
       });
@@ -303,6 +305,7 @@ export const diaryRepository = {
     updates: Partial<DiaryEvent>,
     newAttachments?: Omit<DiaryAttachment, 'id' | 'createdAt' | 'eventId'>[]
   ): Promise<DiaryEvent | null> {
+    if (!id) return null;
     const db = await getDatabase();
     const existing = await this.getById(id);
     if (!existing) return null;
@@ -329,46 +332,46 @@ export const diaryRepository = {
         notificationIds = ?,
         updatedAt = ?
       WHERE id = ?`,
-      [
-        merged.title.trim(),
-        merged.eventType,
+      sanitizeParams([
+        (merged.title || 'Untitled Event').trim(),
+        merged.eventType || 'other',
         merged.subjectId || null,
         merged.description?.trim() || null,
         merged.dueDate,
         merged.dueTime || null,
         merged.dueTimestamp,
-        merged.priority,
-        merged.status,
+        merged.priority || 'medium',
+        merged.status || 'upcoming',
         merged.isImportant ? 1 : 0,
         merged.reminderEnabled ? 1 : 0,
-        merged.reminderType,
+        merged.reminderType || '1_day',
         merged.dailyUntilCompleted ? 1 : 0,
         merged.completedAt || null,
         notifIdsJson,
         merged.updatedAt,
         id,
-      ]
+      ])
     );
 
     if (newAttachments) {
       // Clear old attachments and insert new ones
-      await db.runAsync(`DELETE FROM diary_attachments WHERE eventId = ?`, [id]);
+      await db.runAsync(`DELETE FROM diary_attachments WHERE eventId = ?`, sanitizeParams([id]));
       for (const att of newAttachments) {
         const attId = generateId('att_');
         await db.runAsync(
           `INSERT INTO diary_attachments (
             id, eventId, documentId, title, filePath, fileType, fileSizeBytes, createdAt
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
+          sanitizeParams([
             attId,
             id,
             att.documentId || null,
-            att.title,
+            att.title || 'Attachment',
             att.filePath,
-            att.fileType,
+            att.fileType || 'pdf',
             att.fileSizeBytes || 0,
             Date.now(),
-          ]
+          ])
         );
       }
     }
@@ -380,6 +383,7 @@ export const diaryRepository = {
    * Toggles completion status.
    */
   async toggleComplete(id: string): Promise<boolean> {
+    if (!id) return false;
     const db = await getDatabase();
     const event = await this.getById(id);
     if (!event) return false;
@@ -390,7 +394,7 @@ export const diaryRepository = {
 
     await db.runAsync(
       `UPDATE diary_events SET status = ?, completedAt = ?, updatedAt = ? WHERE id = ?`,
-      [newStatus, completedAt, Date.now(), id]
+      sanitizeParams([newStatus, completedAt, Date.now(), id])
     );
 
     return !isCompleted;
@@ -400,6 +404,7 @@ export const diaryRepository = {
    * Toggles favorite/important status.
    */
   async toggleImportant(id: string): Promise<boolean> {
+    if (!id) return false;
     const db = await getDatabase();
     const event = await this.getById(id);
     if (!event) return false;
@@ -407,7 +412,7 @@ export const diaryRepository = {
     const newImp = !event.isImportant;
     await db.runAsync(
       `UPDATE diary_events SET isImportant = ?, updatedAt = ? WHERE id = ?`,
-      [newImp ? 1 : 0, Date.now(), id]
+      sanitizeParams([newImp ? 1 : 0, Date.now(), id])
     );
 
     return newImp;
@@ -417,9 +422,10 @@ export const diaryRepository = {
    * Deletes a diary event (cascade deletes attachments).
    */
   async delete(id: string): Promise<boolean> {
+    if (!id) return false;
     const db = await getDatabase();
-    await db.runAsync(`DELETE FROM diary_attachments WHERE eventId = ?`, [id]);
-    const res = await db.runAsync(`DELETE FROM diary_events WHERE id = ?`, [id]);
+    await db.runAsync(`DELETE FROM diary_attachments WHERE eventId = ?`, sanitizeParams([id]));
+    const res = await db.runAsync(`DELETE FROM diary_events WHERE id = ?`, sanitizeParams([id]));
     return res.changes > 0;
   },
 
@@ -438,17 +444,17 @@ export const diaryRepository = {
 
     const todayRow = await db.getFirstAsync<any>(
       `SELECT COUNT(*) as count FROM diary_events WHERE dueDate = ? AND status != 'completed'`,
-      [todayStr]
+      sanitizeParams([todayStr])
     );
 
     const weekRow = await db.getFirstAsync<any>(
       `SELECT COUNT(*) as count FROM diary_events WHERE dueDate >= ? AND dueDate <= ? AND status != 'completed'`,
-      [todayStr, endOfWeekStr]
+      sanitizeParams([todayStr, endOfWeekStr])
     );
 
     const overdueRow = await db.getFirstAsync<any>(
       `SELECT COUNT(*) as count FROM diary_events WHERE dueTimestamp < ? AND status != 'completed'`,
-      [now]
+      sanitizeParams([now])
     );
 
     const completedRow = await db.getFirstAsync<any>(
@@ -457,7 +463,7 @@ export const diaryRepository = {
 
     const upcomingRow = await db.getFirstAsync<any>(
       `SELECT COUNT(*) as count FROM diary_events WHERE status != 'completed' AND dueTimestamp >= ?`,
-      [now]
+      sanitizeParams([now])
     );
 
     return {
@@ -473,10 +479,11 @@ export const diaryRepository = {
    * Fetches attachments for a given event.
    */
   async getAttachmentsForEvent(eventId: string): Promise<DiaryAttachment[]> {
+    if (!eventId) return [];
     const db = await getDatabase();
     const rows = await db.getAllAsync<any>(
       `SELECT * FROM diary_attachments WHERE eventId = ? ORDER BY createdAt ASC`,
-      [eventId]
+      sanitizeParams([eventId])
     );
 
     return rows.map((r) => ({

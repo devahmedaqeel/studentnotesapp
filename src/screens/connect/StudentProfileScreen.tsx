@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,41 +7,54 @@ import {
   Image,
   StyleSheet,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
 import { useTheme } from '../../hooks/useTheme';
 import { useAuth } from '../../context/AuthContext';
 import { AppHeader } from '../../components/common/AppHeader';
-import { AppButton } from '../../components/common/AppButton';
 import { LoadingState } from '../../components/common/LoadingState';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { connectService } from '../../services/connectService';
-import { StudentConnectProfile } from '../../types/connect';
+import { chatService } from '../../services/chatService';
+import { StudentConnectProfile, ConnectionStatus } from '../../types/connect';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'StudentProfile'>;
 
 export const StudentProfileScreen: React.FC<Props> = ({ navigation, route }) => {
   const { theme, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const myUserId = user?.id || 'guest_user';
   const { userId } = route.params;
 
   const [profile, setProfile] = useState<StudentConnectProfile | null>(null);
   const [mutuals, setMutuals] = useState<StudentConnectProfile[]>([]);
+  const [relStatus, setRelStatus] = useState<ConnectionStatus>('none');
   const [loading, setLoading] = useState(true);
-  const [showUnfollowConfirm, setShowUnfollowConfirm] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+
+  // Dialog States
+  const [showCancelReqConfirm, setShowCancelReqConfirm] = useState(false);
+  const [showRemoveFriendConfirm, setShowRemoveFriendConfirm] = useState(false);
+  const [showBlockConfirm, setShowBlockConfirm] = useState(false);
+  const [showUnblockConfirm, setShowUnblockConfirm] = useState(false);
 
   const isMe = userId === myUserId;
 
-  const loadProfile = async () => {
+  const loadProfileAndRelationship = useCallback(async () => {
     try {
-      setLoading(true);
       const prof = await connectService.getProfile(userId, myUserId);
       setProfile(prof);
 
       if (!isMe) {
+        const status = await connectService.getConnectionStatus(myUserId, userId);
+        setRelStatus(status);
+
         const m = await connectService.getMutualConnections(myUserId, userId);
         setMutuals(m);
       }
@@ -50,58 +63,129 @@ export const StudentProfileScreen: React.FC<Props> = ({ navigation, route }) => 
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId, myUserId, isMe]);
 
-  useEffect(() => {
-    loadProfile();
-  }, [userId]);
+  useFocusEffect(
+    useCallback(() => {
+      loadProfileAndRelationship();
+    }, [loadProfileAndRelationship])
+  );
 
-  const handleFollowToggle = async () => {
-    if (!profile) return;
-    if (profile.connectionStatus === 'following' || profile.connectionStatus === 'connected') {
-      setShowUnfollowConfirm(true);
-    } else {
+  // 1. Send Friend Request
+  const handleAddFriend = async () => {
+    if (actionLoading || !profile) return;
+    setActionLoading(true);
+    try {
       await connectService.sendFollowRequest(myUserId, profile.id);
-      await loadProfile();
+      await loadProfileAndRelationship();
+      Alert.alert('Request Sent', `Friend request sent to ${profile.displayName}.`);
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to send friend request.');
+    } finally {
+      setActionLoading(false);
     }
   };
 
-  const handleConfirmUnfollow = async () => {
-    setShowUnfollowConfirm(false);
+  // 2. Cancel Sent Friend Request
+  const handleConfirmCancelRequest = async () => {
+    setShowCancelReqConfirm(false);
     if (!profile) return;
-    await connectService.unfollow(myUserId, profile.id);
-    await loadProfile();
-  };
-
-  const handleOpenChat = () => {
-    if (!profile) return;
-    if (profile.connectionStatus !== 'connected') {
-      Alert.alert(
-        'Mutual Connection Required',
-        'Private end-to-end encrypted chat is available once both students have followed each other.'
-      );
-      return;
+    setActionLoading(true);
+    try {
+      await connectService.cancelFriendRequest(myUserId, profile.id);
+      await loadProfileAndRelationship();
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to cancel request.');
+    } finally {
+      setActionLoading(false);
     }
-    navigation.navigate('Chat', { peerId: profile.id });
   };
 
-  const handleReport = () => {
-    Alert.alert('Report Student', 'Thank you. Our moderation team has logged your report.');
+  // 3. Accept Incoming Friend Request
+  const handleAcceptRequest = async () => {
+    if (actionLoading || !profile) return;
+    setActionLoading(true);
+    try {
+      await connectService.acceptFollowRequest(myUserId, profile.id);
+      await loadProfileAndRelationship();
+      Alert.alert('Connected', `You and ${profile.displayName} are now friends!`);
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to accept request.');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
-  const handleBlock = () => {
-    Alert.alert('Block Student', `Are you sure you want to block ${profile?.displayName}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Block',
-        style: 'destructive',
-        onPress: async () => {
-          if (!profile) return;
-          await connectService.blockUser(myUserId, profile.id);
-          navigation.goBack();
-        },
-      },
-    ]);
+  // 4. Reject Incoming Friend Request
+  const handleRejectRequest = async () => {
+    if (actionLoading || !profile) return;
+    setActionLoading(true);
+    try {
+      await connectService.declineFollowRequest(myUserId, profile.id);
+      await loadProfileAndRelationship();
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to decline request.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // 5. Remove Friend
+  const handleConfirmRemoveFriend = async () => {
+    setShowRemoveFriendConfirm(false);
+    if (!profile) return;
+    setActionLoading(true);
+    try {
+      await connectService.removeFriend(myUserId, profile.id);
+      await loadProfileAndRelationship();
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to remove friend.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // 6. Block User
+  const handleConfirmBlock = async () => {
+    setShowBlockConfirm(false);
+    if (!profile) return;
+    setActionLoading(true);
+    try {
+      await connectService.blockUser(myUserId, profile.id);
+      await loadProfileAndRelationship();
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to block student.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // 7. Unblock User
+  const handleConfirmUnblock = async () => {
+    setShowUnblockConfirm(false);
+    if (!profile) return;
+    setActionLoading(true);
+    try {
+      await connectService.unblockUser(myUserId, profile.id);
+      await loadProfileAndRelationship();
+      Alert.alert('Unblocked', `${profile.displayName} has been unblocked.`);
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to unblock student.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // 8. Open Canonical Chat
+  const handleOpenChat = async () => {
+    if (!profile) return;
+    try {
+      const convId = chatService.getConversationId(myUserId, profile.id);
+      await chatService.ensureRemoteConversation(convId, myUserId, profile.id);
+      navigation.navigate('Chat', { peerId: profile.id });
+    } catch {
+      navigation.navigate('Chat', { peerId: profile.id });
+    }
   };
 
   if (loading || !profile) {
@@ -113,6 +197,12 @@ export const StudentProfileScreen: React.FC<Props> = ({ navigation, route }) => 
     );
   }
 
+  const isFriends = relStatus === 'friends' || relStatus === 'connected';
+  const isRequestSent = relStatus === 'request_sent' || relStatus === 'requested';
+  const isRequestReceived = relStatus === 'request_received';
+  const isBlockedByMe = relStatus === 'blocked_by_me' || relStatus === 'blocked';
+  const isBlockedByThem = relStatus === 'blocked_by_them';
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <AppHeader
@@ -120,16 +210,22 @@ export const StudentProfileScreen: React.FC<Props> = ({ navigation, route }) => 
         showBack
         onBack={() => navigation.goBack()}
         rightAction={
-          !isMe ? (
-            <TouchableOpacity onPress={handleBlock} style={styles.headerMoreBtn}>
+          !isMe && !isBlockedByMe ? (
+            <TouchableOpacity onPress={() => setShowBlockConfirm(true)} style={styles.headerMoreBtn}>
               <Ionicons name="shield-outline" size={20} color={theme.colors.danger} />
             </TouchableOpacity>
           ) : undefined
         }
       />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Profile Header Card */}
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(insets.bottom, 20) + 30 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Profile Card */}
         <View style={[styles.profileCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
           <View style={styles.avatarWrap}>
             {profile.avatarUrl ? (
@@ -141,7 +237,7 @@ export const StudentProfileScreen: React.FC<Props> = ({ navigation, route }) => 
                 </Text>
               </View>
             )}
-            {profile.onlineStatus === 'online' && <View style={styles.onlineDot} />}
+            {profile.onlineStatus === 'online' && !isBlockedByMe && <View style={styles.onlineDot} />}
           </View>
 
           <Text style={[styles.displayName, { color: theme.colors.text }]}>
@@ -210,128 +306,195 @@ export const StudentProfileScreen: React.FC<Props> = ({ navigation, route }) => 
         </View>
 
         {/* Mutual Connections Banner */}
-        {mutuals.length > 0 && (
+        {mutuals.length > 0 && !isMe && (
           <View style={[styles.mutualCard, { backgroundColor: theme.colors.cardSecondary, borderColor: theme.colors.borderLight }]}>
             <Ionicons name="people" size={16} color={theme.colors.primary} style={{ marginRight: 8 }} />
             <Text style={[styles.mutualText, { color: theme.colors.text }]}>
-              {mutuals.length} Mutual Connections ({mutuals.slice(0, 2).map((m) => m.displayName).join(', ')})
+              {mutuals.length} Mutual Connection{mutuals.length === 1 ? '' : 's'} ({mutuals.slice(0, 2).map((m) => m.displayName).join(', ')})
             </Text>
           </View>
         )}
 
-        {/* Action Buttons Row */}
+        {/* DYNAMIC RELATIONSHIP ACTION SECTION */}
         {!isMe && (
           <View style={styles.actionsContainer}>
-            {/* Primary Action Button: Follow / Following / Follow Back */}
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={handleFollowToggle}
-              style={[
-                styles.mainFollowBtn,
-                {
-                  backgroundColor:
-                    profile.connectionStatus === 'following' || profile.connectionStatus === 'connected'
-                      ? theme.colors.cardSecondary
-                      : theme.colors.primary,
-                  borderColor: theme.colors.border,
-                  borderWidth: profile.connectionStatus === 'following' || profile.connectionStatus === 'connected' ? 1 : 0,
-                },
-              ]}
-            >
-              <Ionicons
-                name={
-                  profile.connectionStatus === 'connected'
-                    ? 'checkmark-circle'
-                    : profile.connectionStatus === 'following'
-                    ? 'checkmark'
-                    : 'person-add'
-                }
-                size={16}
-                color={
-                  profile.connectionStatus === 'following' || profile.connectionStatus === 'connected'
-                    ? theme.colors.text
-                    : '#FFFFFF'
-                }
-                style={{ marginRight: 6 }}
-              />
-              <Text
-                style={[
-                  styles.followBtnText,
-                  {
-                    color:
-                      profile.connectionStatus === 'following' || profile.connectionStatus === 'connected'
-                        ? theme.colors.text
-                        : '#FFFFFF',
-                  },
-                ]}
-              >
-                {profile.connectionStatus === 'connected'
-                  ? 'Connected'
-                  : profile.connectionStatus === 'following'
-                  ? 'Following'
-                  : profile.connectionStatus === 'requested'
-                  ? 'Requested'
-                  : profile.connectionStatus === 'follow_back'
-                  ? 'Follow Back'
-                  : 'Follow'}
-              </Text>
-            </TouchableOpacity>
+            {/* STATE E: BLOCKED */}
+            {isBlockedByMe ? (
+              <View style={styles.blockedStateRow}>
+                <View style={styles.blockedBadge}>
+                  <Ionicons name="shield" size={16} color={theme.colors.danger} style={{ marginRight: 6 }} />
+                  <Text style={[styles.blockedBadgeText, { color: theme.colors.danger }]}>Blocked</Text>
+                </View>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  style={[styles.unblockBtn, { borderColor: theme.colors.danger }]}
+                  onPress={() => setShowUnblockConfirm(true)}
+                  disabled={actionLoading}
+                >
+                  {actionLoading ? (
+                    <ActivityIndicator size="small" color={theme.colors.danger} />
+                  ) : (
+                    <Text style={[styles.unblockBtnText, { color: theme.colors.danger }]}>Unblock</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            ) : isBlockedByThem ? (
+              <View style={styles.blockedNoticeBox}>
+                <Text style={[styles.blockedNoticeText, { color: theme.colors.textMuted }]}>
+                  This user is currently unavailable.
+                </Text>
+              </View>
+            ) : isFriends ? (
+              /* STATE D: ALREADY FRIENDS */
+              <View style={styles.friendsActionCol}>
+                <View style={styles.friendsBadgeRow}>
+                  <Ionicons name="checkmark-circle" size={18} color="#10B981" style={{ marginRight: 6 }} />
+                  <Text style={styles.friendsBadgeText}>Friends</Text>
+                </View>
 
-            {/* Message Button (Active when connected) */}
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={handleOpenChat}
-              style={[
-                styles.messageBtn,
-                {
-                  backgroundColor:
-                    profile.connectionStatus === 'connected'
-                      ? '#10B981'
-                      : theme.colors.cardSecondary,
-                  borderColor: theme.colors.border,
-                  borderWidth: profile.connectionStatus !== 'connected' ? 1 : 0,
-                },
-              ]}
-            >
-              <Ionicons
-                name="chatbubble-ellipses"
-                size={16}
-                color={profile.connectionStatus === 'connected' ? '#FFFFFF' : theme.colors.textMuted}
-                style={{ marginRight: 6 }}
-              />
-              <Text
-                style={[
-                  styles.messageBtnText,
-                  {
-                    color:
-                      profile.connectionStatus === 'connected'
-                        ? '#FFFFFF'
-                        : theme.colors.textMuted,
-                  },
-                ]}
+                <View style={styles.friendsBtnRow}>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={handleOpenChat}
+                    style={[styles.chatBtn, { backgroundColor: '#10B981' }]}
+                  >
+                    <Ionicons name="chatbubble-ellipses" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.chatBtnText}>Message</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() => setShowRemoveFriendConfirm(true)}
+                    style={[styles.removeFriendBtn, { borderColor: theme.colors.border }]}
+                  >
+                    <Text style={[styles.removeFriendBtnText, { color: theme.colors.danger }]}>Remove</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : isRequestSent ? (
+              /* STATE B: I SENT A REQUEST */
+              <View style={styles.requestSentRow}>
+                <View style={styles.requestSentBadge}>
+                  <Ionicons name="time" size={15} color="#F59E0B" style={{ marginRight: 6 }} />
+                  <Text style={styles.requestSentBadgeText}>Request Sent</Text>
+                </View>
+
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => setShowCancelReqConfirm(true)}
+                  style={[styles.cancelReqBtn, { borderColor: theme.colors.border }]}
+                  disabled={actionLoading}
+                >
+                  {actionLoading ? (
+                    <ActivityIndicator size="small" color={theme.colors.danger} />
+                  ) : (
+                    <Text style={[styles.cancelReqBtnText, { color: theme.colors.danger }]}>Cancel</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            ) : isRequestReceived ? (
+              /* STATE C: THEY SENT ME A REQUEST */
+              <View style={styles.incomingReqBox}>
+                <Text style={[styles.incomingReqLabel, { color: theme.colors.text }]}>
+                  {profile.displayName} sent you a friend request
+                </Text>
+                <View style={styles.incomingReqBtnRow}>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={handleAcceptRequest}
+                    style={[styles.acceptReqBtn, { backgroundColor: theme.colors.primary }]}
+                    disabled={actionLoading}
+                  >
+                    {actionLoading ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <>
+                        <Ionicons name="checkmark" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                        <Text style={styles.acceptReqBtnText}>Accept</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={handleRejectRequest}
+                    style={[styles.rejectReqBtn, { backgroundColor: theme.colors.cardSecondary }]}
+                    disabled={actionLoading}
+                  >
+                    <Ionicons name="close" size={16} color={theme.colors.textSecondary} style={{ marginRight: 4 }} />
+                    <Text style={[styles.rejectReqBtnText, { color: theme.colors.textSecondary }]}>Reject</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              /* STATE A: NO RELATIONSHIP */
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={handleAddFriend}
+                style={[styles.addFriendPrimaryBtn, { backgroundColor: theme.colors.primary }]}
+                disabled={actionLoading}
               >
-                Message
-              </Text>
-            </TouchableOpacity>
+                {actionLoading ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="person-add" size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
+                    <Text style={styles.addFriendPrimaryBtnText}>Add Friend</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
-        {!isMe && profile.connectionStatus !== 'connected' && (
+        {!isMe && !isFriends && !isBlockedByMe && (
           <Text style={[styles.mutualHint, { color: theme.colors.textSecondary }]}>
-            🔒 End-to-end encrypted chat unlocks automatically once you both follow each other.
+            🔒 End-to-end encrypted chat unlocks automatically once you both connect.
           </Text>
         )}
       </ScrollView>
 
-      {/* Unfollow Confirmation Dialog */}
+      {/* Cancel Request Confirmation Dialog */}
       <ConfirmDialog
-        visible={showUnfollowConfirm}
-        title={`Unfollow ${profile.displayName}?`}
-        message={`Are you sure you want to unfollow @${profile.username}? Private chat will become inactive until mutual connection is restored.`}
-        confirmTitle="Unfollow"
+        visible={showCancelReqConfirm}
+        title="Cancel Friend Request?"
+        message={`Are you sure you want to cancel your pending friend request to ${profile.displayName}?`}
+        confirmTitle="Confirm"
         isDanger
-        onConfirm={handleConfirmUnfollow}
-        onCancel={() => setShowUnfollowConfirm(false)}
+        onConfirm={handleConfirmCancelRequest}
+        onCancel={() => setShowCancelReqConfirm(false)}
+      />
+
+      {/* Remove Friend Confirmation Dialog */}
+      <ConfirmDialog
+        visible={showRemoveFriendConfirm}
+        title="Remove Friend?"
+        message={`Are you sure you want to remove ${profile.displayName} from your friends? Your existing messages will remain preserved.`}
+        confirmTitle="Remove"
+        isDanger
+        onConfirm={handleConfirmRemoveFriend}
+        onCancel={() => setShowRemoveFriendConfirm(false)}
+      />
+
+      {/* Block Confirmation Dialog */}
+      <ConfirmDialog
+        visible={showBlockConfirm}
+        title="Block Student?"
+        message={`Are you sure you want to block ${profile.displayName}? They will no longer be able to message you or see your online status.`}
+        confirmTitle="Block"
+        isDanger
+        onConfirm={handleConfirmBlock}
+        onCancel={() => setShowBlockConfirm(false)}
+      />
+
+      {/* Unblock Confirmation Dialog */}
+      <ConfirmDialog
+        visible={showUnblockConfirm}
+        title="Unblock Student?"
+        message={`Are you sure you want to unblock ${profile.displayName}?`}
+        confirmTitle="Unblock"
+        onConfirm={handleConfirmUnblock}
+        onCancel={() => setShowUnblockConfirm(false)}
       />
     </View>
   );
@@ -348,54 +511,56 @@ const styles = StyleSheet.create({
   profileCard: {
     borderRadius: 24,
     borderWidth: 1,
-    padding: 20,
+    padding: 24,
     alignItems: 'center',
-    marginBottom: 12,
   },
   avatarWrap: {
+    width: 88,
+    height: 88,
     position: 'relative',
     marginBottom: 12,
   },
   avatar: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
   },
   avatarPlaceholder: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarInitials: {
-    fontSize: 32,
+    fontSize: 34,
     fontWeight: '800',
   },
   onlineDot: {
-    position: 'absolute',
-    bottom: 2,
-    right: 2,
     width: 16,
     height: 16,
     borderRadius: 8,
     backgroundColor: '#10B981',
     borderWidth: 2.5,
     borderColor: '#FFFFFF',
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
   },
   displayName: {
     fontSize: 20,
     fontWeight: '800',
-    marginBottom: 6,
+    textAlign: 'center',
   },
   tagsRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
-    marginBottom: 12,
+    marginTop: 8,
   },
   tagPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 8,
   },
   tagText: {
@@ -405,26 +570,29 @@ const styles = StyleSheet.create({
   academicBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginTop: 10,
+    paddingHorizontal: 8,
   },
   academicText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 12.5,
+    textAlign: 'center',
   },
   bioText: {
-    fontSize: 13,
+    fontSize: 13.5,
     fontStyle: 'italic',
     textAlign: 'center',
-    marginVertical: 8,
-    lineHeight: 18,
+    marginTop: 12,
+    lineHeight: 19,
+    paddingHorizontal: 10,
   },
   metricsRow: {
     flexDirection: 'row',
-    width: '100%',
-    paddingTop: 16,
-    marginTop: 8,
-    borderTopWidth: 0.5,
     alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    marginTop: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
   },
   metricCol: {
     flex: 1,
@@ -435,8 +603,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   metricLabel: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 12,
     marginTop: 2,
   },
   metricDivider: {
@@ -449,45 +616,191 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 14,
     borderWidth: 1,
-    marginBottom: 14,
+    marginTop: 14,
   },
   mutualText: {
-    fontSize: 12,
+    fontSize: 12.5,
     fontWeight: '600',
+    flex: 1,
   },
   actionsContainer: {
+    marginTop: 18,
+  },
+  addFriendPrimaryBtn: {
     flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 48,
+    borderRadius: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  addFriendPrimaryBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  requestSentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
+  },
+  requestSentBadge: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+  },
+  requestSentBadgeText: {
+    color: '#F59E0B',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  cancelReqBtn: {
+    height: 46,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelReqBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  incomingReqBox: {
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: 'rgba(99, 102, 241, 0.08)',
+  },
+  incomingReqLabel: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    textAlign: 'center',
     marginBottom: 10,
   },
-  mainFollowBtn: {
+  incomingReqBtnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  acceptReqBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 14,
+    height: 42,
+    borderRadius: 12,
   },
-  followBtnText: {
+  acceptReqBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  rejectReqBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 42,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+  },
+  rejectReqBtnText: {
     fontSize: 13,
+    fontWeight: '600',
+  },
+  friendsActionCol: {
+    gap: 10,
+  },
+  friendsBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+  },
+  friendsBadgeText: {
+    color: '#10B981',
+    fontSize: 14,
     fontWeight: '800',
   },
-  messageBtn: {
+  friendsBtnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  chatBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 14,
+    height: 46,
+    borderRadius: 12,
   },
-  messageBtnText: {
+  chatBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  removeFriendBtn: {
+    height: 46,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  removeFriendBtnText: {
     fontSize: 13,
-    fontWeight: '800',
+    fontWeight: '700',
+  },
+  blockedStateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  blockedBadge: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+  },
+  blockedBadgeText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  unblockBtn: {
+    height: 46,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unblockBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  blockedNoticeBox: {
+    padding: 16,
+    borderRadius: 14,
+    alignItems: 'center',
+  },
+  blockedNoticeText: {
+    fontSize: 13,
   },
   mutualHint: {
-    fontSize: 11,
+    fontSize: 12,
     textAlign: 'center',
-    lineHeight: 16,
-    paddingHorizontal: 16,
+    marginTop: 14,
+    lineHeight: 17,
   },
 });

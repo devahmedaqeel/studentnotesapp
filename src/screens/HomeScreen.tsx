@@ -34,6 +34,7 @@ import { usePdfs } from '../hooks/usePdfs';
 import { documentRepository } from '../database/repositories/documentRepository';
 import { diaryRepository } from '../database/repositories/diaryRepository';
 import { timetableRepository } from '../database/repositories/timetableRepository';
+import { savedLinkRepository } from '../database/repositories/savedLinkRepository';
 import { timetableService } from '../services/timetableService';
 import { chatService } from '../services/chatService';
 import { UpcomingDeadlinesWidget } from '../components/diary/UpcomingDeadlinesWidget';
@@ -54,6 +55,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const { notes, loading: loadingNotes, refreshNotes } = useNotes();
   const { pdfs, loading: loadingPdfs, refreshPdfs } = usePdfs();
   const [docCount, setDocCount] = useState(0);
+  const [linkCount, setLinkCount] = useState(0);
   const [upcomingDeadlines, setUpcomingDeadlines] = useState<DiaryEvent[]>([]);
   const [todayClasses, setTodayClasses] = useState<TimetableClass[]>([]);
   const [currentClass, setCurrentClass] = useState<TimetableClass | null>(null);
@@ -120,6 +122,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
       refreshNotes();
       refreshPdfs();
       documentRepository.getCount().then(setDocCount).catch(() => {});
+      savedLinkRepository.getSummaryStats().then((s) => setLinkCount(s.total)).catch(() => {});
       diaryRepository.getUpcoming(3).then(setUpcomingDeadlines).catch(() => {});
       timetableRepository.getTodayClasses().then((cls) => {
         setTodayClasses(cls);
@@ -389,6 +392,38 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             </View>
             <Text style={[styles.compressSubtitle, { color: theme.colors.textSecondary }]}>
               Weekly Schedule — University classes, instructors, rooms & reminders
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
+        </TouchableOpacity>
+
+        {/* Saved Links / Resource Manager Entry Card */}
+        <TouchableOpacity
+          activeOpacity={0.88}
+          style={[
+            styles.compressCard,
+            {
+              backgroundColor: theme.colors.card,
+              borderColor: theme.colors.border,
+              marginTop: 10,
+            },
+          ]}
+          onPress={() => (navigation.getParent() as any)?.navigate('SavedLinks')}
+        >
+          <View style={[styles.compressIconBox, { backgroundColor: '#E0F2FE' }]}>
+            <Ionicons name="bookmark" size={24} color="#0284C7" />
+          </View>
+          <View style={styles.compressTextWrapper}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={[styles.compressTitle, { color: theme.colors.text }]}>Saved Links</Text>
+              <View style={[styles.docCountPill, { backgroundColor: 'rgba(2, 132, 199, 0.18)' }]}>
+                <Text style={[styles.docCountPillText, { color: '#0284C7' }]}>
+                  {linkCount} {linkCount === 1 ? 'Resource' : 'Resources'}
+                </Text>
+              </View>
+            </View>
+            <Text style={[styles.compressSubtitle, { color: theme.colors.textSecondary }]}>
+              Resource Manager — Save & organize useful study websites, articles, docs & PDFs
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />

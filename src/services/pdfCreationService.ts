@@ -7,6 +7,7 @@ import { PdfDocument } from '../types/pdf';
 import { PdfCompressionConfig, CompressionPreset } from '../types/compression';
 import { generateId } from '../utils/id';
 import { supabase } from './supabase';
+import { storageService } from './storageService';
 
 export const DEFAULT_PDF_PRESETS: Record<Exclude<CompressionPreset, 'custom'>, PdfCompressionConfig> = {
   original: {
@@ -199,15 +200,26 @@ export const pdfCreationService = {
       fileSize: pdfSizeBytes,
     });
 
-    if (userId) {
+    // 8. Upload to cloud storage if authenticated
+    if (userId && userId !== 'guest_user') {
       try {
+        const cloudStoragePath = await storageService.uploadPdfFile(
+          userId,
+          input.subjectId,
+          pdfId,
+          persistentPdfPath
+        );
+
+        const remotePathOrLocal = cloudStoragePath || createdPdf.filePath;
+
         await supabase.from('pdfs').upsert({
           id: createdPdf.id,
           user_id: userId,
           subject_id: createdPdf.subjectId,
           folder_id: createdPdf.folderId || null,
           title: createdPdf.title,
-          file_path: createdPdf.filePath,
+          file_path: remotePathOrLocal,
+          file_url: remotePathOrLocal,
           page_count: createdPdf.pageCount,
           file_size_bytes: createdPdf.fileSize || 0,
           is_favorite: createdPdf.favorite,

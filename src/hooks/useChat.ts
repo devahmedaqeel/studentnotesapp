@@ -87,10 +87,21 @@ export const useChat = (peerId?: string) => {
             const raw = payload.new;
             if (raw.sender_id !== myUserId && secretKey) {
               try {
-                const decrypted = await e2eeService.decryptText(
-                  { ciphertext: raw.ciphertext, iv: raw.iv, hmac: raw.hmac, version: '1.0' },
-                  secretKey
-                );
+                let decrypted = 'New message';
+                if (raw.message_type === 'text') {
+                  decrypted = await e2eeService.decryptText(
+                    { ciphertext: raw.ciphertext, iv: raw.iv, hmac: raw.hmac, version: '1.0' },
+                    secretKey
+                  );
+                } else if (raw.message_type === 'voice') {
+                  decrypted = 'Voice message';
+                } else if (raw.message_type === 'image') {
+                  decrypted = 'Photo';
+                } else if (raw.message_type === 'pdf') {
+                  decrypted = raw.attachment_name || 'PDF document';
+                } else {
+                  decrypted = raw.attachment_name || 'Attachment';
+                }
 
                 const newMsg: ChatMessage = {
                   id: raw.id,
@@ -110,6 +121,10 @@ export const useChat = (peerId?: string) => {
                   status: 'delivered',
                   createdAt: Number(raw.created_at),
                 };
+
+                if (newMsg.attachmentPath) {
+                  newMsg.attachmentPath = await chatService.resolveAttachmentPath(newMsg);
+                }
 
                 setMessages((prev) => [...prev, newMsg]);
                 await chatService.markAsRead(conversationId, myUserId);

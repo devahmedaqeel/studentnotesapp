@@ -21,6 +21,7 @@ export type UserProfile = StudentProfile;
 export interface AuthContextType {
   isOffline: boolean;
   hasChosenMode: boolean;
+  hasAcceptedTerms: boolean;
   user: User | null;
   session: Session | null;
   profile: UserProfile | null;
@@ -28,6 +29,7 @@ export interface AuthContextType {
   loading: boolean;
   syncing: boolean;
   syncProgress: { status: string; current: number; total: number };
+  acceptTerms: () => Promise<void>;
   continueOffline: () => Promise<void>;
   loginWithEmail: (email: string, pass: string) => Promise<{ success: boolean; error?: string }>;
   registerWithEmail: (
@@ -39,6 +41,8 @@ export interface AuthContextType {
   sendPasswordResetOtp: (email: string) => Promise<{ success: boolean; error?: string }>;
   verifyOtpForPasswordReset: (email: string, otp: string) => Promise<{ success: boolean; error?: string }>;
   resetPasswordWithNewPassword: (newPassword: string) => Promise<{ success: boolean; error?: string }>;
+  pendingPasswordReset: boolean;
+  clearPendingPasswordReset: () => void;
   logout: () => Promise<void>;
   updateProfile: (data: Partial<UserProfile>) => Promise<boolean>;
   syncNow: () => Promise<boolean>;
@@ -46,6 +50,7 @@ export interface AuthContextType {
 
 const HAS_CHOSEN_MODE_KEY = 'studentnotes_has_chosen_mode';
 const LOCAL_PROFILE_KEY = 'studentnotes_local_profile';
+export const TERMS_ACCEPTED_KEY = 'studentnotes_terms_accepted_v1';
 // Per-user scoped profile key — ensures Gmail A and Gmail B never share a stored profile
 const userProfileKey = (userId: string) => `studentnotes_profile_${userId}`;
 
@@ -54,12 +59,14 @@ const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isOffline, setIsOffline] = useState(true);
   const [hasChosenMode, setHasChosenMode] = useState(false);
+  const [hasAcceptedTerms, setHasAcceptedTerms] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState({ status: '', current: 0, total: 0 });
+  const [pendingPasswordReset, setPendingPasswordReset] = useState(false);
 
   // Calculate if profile is completed
   const isProfileComplete = Boolean(
@@ -67,9 +74,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     (profile?.fullName && (profile?.university || profile?.institution))
   );
 
+  const clearPendingPasswordReset = () => {
+    setPendingPasswordReset(false);
+  };
+
   useEffect(() => {
     async function loadAuth() {
       try {
+        const termsAccepted = await AsyncStorage.getItem(TERMS_ACCEPTED_KEY);
+        if (termsAccepted === 'true') {
+          setHasAcceptedTerms(true);
+        }
+
         const modeChosen = await AsyncStorage.getItem(HAS_CHOSEN_MODE_KEY);
         if (modeChosen === 'true') {
           setHasChosenMode(true);
@@ -100,6 +116,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const handleDeepLink = async (url: string | null) => {
       if (!url) return;
       try {
+        const isRecovery = url.includes('reset-password') || url.includes('type=recovery');
+
         if (url.includes('code=')) {
           const codeMatch = url.match(/code=([^&#]+)/);
           const code = codeMatch ? decodeURIComponent(codeMatch[1]) : null;
@@ -112,7 +130,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setIsOffline(false);
                 setHasChosenMode(true);
                 await AsyncStorage.setItem(HAS_CHOSEN_MODE_KEY, 'true');
-                await loadCloudProfile(exData.user.id, exData.user.email || '');
+                if (isRecovery) {
+                  setPendingPasswordReset(true);
+                } else {
+                  await loadCloudProfile(exData.user.id, exData.user.email || '');
+                }
                 return;
               }
             } catch {}
@@ -122,6 +144,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const params = new URLSearchParams(hashOrQuery);
           const accessToken = params.get('access_token');
           const refreshToken = params.get('refresh_token');
+          const typeParam = params.get('type');
           if (accessToken && refreshToken) {
             try {
               const { data: setSessData, error: setSessErr } = await supabase.auth.setSession({
@@ -134,7 +157,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setIsOffline(false);
                 setHasChosenMode(true);
                 await AsyncStorage.setItem(HAS_CHOSEN_MODE_KEY, 'true');
-                await loadCloudProfile(setSessData.user.id, setSessData.user.email || '');
+                if (isRecovery || typeParam === 'recovery') {
+                  setPendingPasswordReset(true);
+                } else {
+                  await loadCloudProfile(setSessData.user.id, setSessData.user.email || '');
+                }
                 return;
               }
             } catch {}
@@ -149,7 +176,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setIsOffline(false);
           setHasChosenMode(true);
           await AsyncStorage.setItem(HAS_CHOSEN_MODE_KEY, 'true');
-          await loadCloudProfile(sessData.session.user.id, sessData.session.user.email || '');
+          if (isRecovery) {
+            setPendingPasswordReset(true);
+          } else {
+            await loadCloudProfile(sessData.session.user.id, sessData.session.user.email || '');
+          }
         }
       } catch (err) {
         console.warn('Deep link auth handle error:', err);
@@ -160,6 +191,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const linkingSub = Linking.addEventListener('url', (event) => handleDeepLink(event.url));
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+      if (_event === 'PASSWORD_RECOVERY') {
+        if (newSession?.user) {
+          setSession(newSession);
+          setUser(newSession.user);
+          setIsOffline(false);
+        }
+        setPendingPasswordReset(true);
+        return;
+      }
+
       if (newSession?.user) {
         setSession(newSession);
         setUser(newSession.user);
@@ -325,6 +366,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         profileCompleted: false,
       });
     }
+  };
+
+  const acceptTerms = async () => {
+    setHasAcceptedTerms(true);
+    await AsyncStorage.setItem(TERMS_ACCEPTED_KEY, 'true');
+    await AsyncStorage.setItem('studentnotes_terms_accepted_at', new Date().toISOString());
   };
 
   const continueOffline = async () => {
@@ -692,6 +739,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     newPassword: string
   ): Promise<{ success: boolean; error?: string }> => {
     try {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) {
+        return {
+          success: false,
+          error: 'Your password reset session has expired or is invalid. Please request a new recovery email.',
+        };
+      }
+
       const { error } = await supabase.auth.updateUser({
         password: newPassword,
       });
@@ -699,6 +754,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error) {
         return { success: false, error: error.message };
       }
+
+      setPendingPasswordReset(false);
+
+      // Cleanly sign out session so user can log in with new password
+      try {
+        await supabase.auth.signOut();
+      } catch {}
+      setUser(null);
+      setSession(null);
 
       return { success: true };
     } catch (e: any) {
@@ -715,6 +779,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       await supabase.auth.signOut();
     } catch {}
+    try {
+      await syncService.clearLocalUserData();
+    } catch (e) {
+      console.warn('Could not clear local user data on logout:', e);
+    }
     setUser(null);
     setSession(null);
     setIsOffline(true);
@@ -831,6 +900,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         isOffline,
         hasChosenMode,
+        hasAcceptedTerms,
         user,
         session,
         profile,
@@ -838,6 +908,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loading,
         syncing,
         syncProgress,
+        pendingPasswordReset,
+        clearPendingPasswordReset,
+        acceptTerms,
         continueOffline,
         loginWithEmail,
         registerWithEmail,

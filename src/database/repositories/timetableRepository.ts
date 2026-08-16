@@ -1,4 +1,4 @@
-import { getDatabase } from '../database';
+import { getDatabase, sanitizeParams } from '../database';
 import { TimetableClass, DayOfWeek, TimetableSettings } from '../../types/timetable';
 import { generateId } from '../../utils/id';
 import { timetableService } from '../../services/timetableService';
@@ -42,7 +42,7 @@ export const timetableRepository = {
        LEFT JOIN subjects s ON c.subjectId = s.id
        WHERE c.dayOfWeek = ?
        ORDER BY c.startTime ASC`,
-      [dayOfWeek]
+      sanitizeParams([dayOfWeek])
     );
 
     return rows.map(this.mapRowToClass);
@@ -52,6 +52,7 @@ export const timetableRepository = {
    * Retrieves a class by ID.
    */
   async getById(id: string): Promise<TimetableClass | null> {
+    if (!id) return null;
     const db = await getDatabase();
     const row = await db.getFirstAsync<any>(
       `SELECT 
@@ -60,7 +61,7 @@ export const timetableRepository = {
        FROM timetable_classes c
        LEFT JOIN subjects s ON c.subjectId = s.id
        WHERE c.id = ?`,
-      [id]
+      sanitizeParams([id])
     );
 
     return row ? this.mapRowToClass(row) : null;
@@ -70,6 +71,7 @@ export const timetableRepository = {
    * Retrieves classes associated with a specific subject.
    */
   async getBySubject(subjectId: string): Promise<TimetableClass[]> {
+    if (!subjectId) return [];
     const db = await getDatabase();
     const rows = await db.getAllAsync<any>(
       `SELECT 
@@ -79,7 +81,7 @@ export const timetableRepository = {
        LEFT JOIN subjects s ON c.subjectId = s.id
        WHERE c.subjectId = ?
        ORDER BY c.dayOfWeek, c.startTime ASC`,
-      [subjectId]
+      sanitizeParams([subjectId])
     );
 
     return rows.map(this.mapRowToClass);
@@ -118,11 +120,11 @@ export const timetableRepository = {
         room, building, notes, reminderEnabled, reminderMinutes,
         notificationId, createdAt, updatedAt
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
+      sanitizeParams([
         newId,
         cls.userId || null,
         cls.subjectId || null,
-        cls.subjectName.trim(),
+        (cls.subjectName || 'Class').trim(),
         cls.subjectColor || '#4F46E5',
         cls.teacherName?.trim() || null,
         cls.dayOfWeek,
@@ -136,7 +138,7 @@ export const timetableRepository = {
         cls.notificationId || null,
         now,
         now,
-      ]
+      ])
     );
 
     const created = await this.getById(newId);
@@ -147,6 +149,7 @@ export const timetableRepository = {
    * Updates an existing timetable class.
    */
   async update(id: string, updates: Partial<TimetableClass>): Promise<TimetableClass | null> {
+    if (!id) return null;
     const db = await getDatabase();
     const existing = await this.getById(id);
     if (!existing) return null;
@@ -170,9 +173,9 @@ export const timetableRepository = {
         notificationId = ?,
         updatedAt = ?
       WHERE id = ?`,
-      [
+      sanitizeParams([
         merged.subjectId || null,
-        merged.subjectName.trim(),
+        (merged.subjectName || 'Class').trim(),
         merged.subjectColor || '#4F46E5',
         merged.teacherName?.trim() || null,
         merged.dayOfWeek,
@@ -186,7 +189,7 @@ export const timetableRepository = {
         merged.notificationId || null,
         merged.updatedAt,
         id,
-      ]
+      ])
     );
 
     return await this.getById(id);
@@ -196,8 +199,9 @@ export const timetableRepository = {
    * Deletes a timetable class.
    */
   async delete(id: string): Promise<boolean> {
+    if (!id) return false;
     const db = await getDatabase();
-    const res = await db.runAsync(`DELETE FROM timetable_classes WHERE id = ?`, [id]);
+    const res = await db.runAsync(`DELETE FROM timetable_classes WHERE id = ?`, sanitizeParams([id]));
     return res.changes > 0;
   },
 
@@ -231,14 +235,14 @@ export const timetableRepository = {
         id, dailyNotificationEnabled, notificationTime, notifyFreeDays,
         classRemindersEnabled, defaultReminderMinutes, updatedAt
       ) VALUES ('default_settings', ?, ?, ?, ?, ?, ?)`,
-      [
+      sanitizeParams([
         merged.dailyNotificationEnabled ? 1 : 0,
         merged.notificationTime,
         merged.notifyFreeDays ? 1 : 0,
         merged.classRemindersEnabled ? 1 : 0,
         merged.defaultReminderMinutes,
         Date.now(),
-      ]
+      ])
     );
 
     return merged;

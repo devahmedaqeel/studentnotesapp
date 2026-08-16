@@ -8,6 +8,7 @@ import { AppHeader } from '../../components/common/AppHeader';
 import { EmptyState } from '../../components/common/EmptyState';
 import { StudentSearchCard } from '../../components/connect/StudentSearchCard';
 import { connectService } from '../../services/connectService';
+import { privacyService } from '../../services/privacyService';
 import { StudentConnectProfile } from '../../types/connect';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Following'>;
@@ -19,11 +20,19 @@ export const FollowingScreen: React.FC<Props> = ({ navigation, route }) => {
   const targetUserId = route.params?.userId || myUserId;
 
   const [following, setFollowing] = useState<StudentConnectProfile[]>([]);
+  const [isPrivate, setIsPrivate] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const loadFollowing = async () => {
     try {
       setLoading(true);
+      const canView = await privacyService.canViewFollowers(targetUserId, myUserId);
+      if (!canView) {
+        setIsPrivate(true);
+        setFollowing([]);
+        return;
+      }
+      setIsPrivate(false);
       const list = await connectService.getFollowing(targetUserId);
       setFollowing(list);
     } catch {
@@ -46,7 +55,13 @@ export const FollowingScreen: React.FC<Props> = ({ navigation, route }) => {
         onBack={() => navigation.goBack()}
       />
 
-      {following.length === 0 && !loading ? (
+      {isPrivate ? (
+        <EmptyState
+          title="Following List Hidden"
+          description="This student has chosen to keep their following list private."
+          icon="lock-closed-outline"
+        />
+      ) : following.length === 0 && !loading ? (
         <EmptyState
           title="Not Following Anyone"
           description="Find your university classmates and follow them to connect."

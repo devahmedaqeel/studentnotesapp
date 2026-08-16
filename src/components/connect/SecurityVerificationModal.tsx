@@ -46,13 +46,13 @@ export const SecurityVerificationModal: React.FC<SecurityVerificationModalProps>
               </View>
 
               <Text style={[styles.description, { color: theme.colors.textSecondary }]}>
-                To verify that messages and attachments with {peerProfile.displayName} are end-to-end encrypted, compare this security code with their device.
+                To verify the current client-side encryption context with {peerProfile.displayName}, compare this security code with their device.
               </Text>
 
               <View style={styles.featuresRow}>
                 <View style={styles.featureItem}>
                   <Ionicons name="lock-closed" size={14} color="#10B981" style={{ marginRight: 4 }} />
-                  <Text style={[styles.featureText, { color: theme.colors.text }]}>Client-side E2EE</Text>
+                  <Text style={[styles.featureText, { color: theme.colors.text }]}>Client-side encryption</Text>
                 </View>
                 <View style={styles.featureItem}>
                   <Ionicons name="key" size={14} color="#10B981" style={{ marginRight: 4 }} />

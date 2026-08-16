@@ -17,14 +17,53 @@ import { fileService } from './src/services/fileService';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
+import * as Notifications from 'expo-notifications';
+import { navigationRef, navigate } from './src/navigation/navigationRef';
+import { notificationService } from './src/services/notificationService';
+import { timetableNotificationService } from './src/services/timetableNotificationService';
+
+const linking = {
+  prefixes: ['studentnotes://', 'https://ymtufelczpyiinlwqhbh.supabase.co'],
+  config: {
+    screens: {
+      ResetPassword: 'reset-password',
+      Login: 'login',
+    },
+  },
+};
+
 function MainApp() {
   const { theme, isDark } = useTheme();
   const { loading } = useAuth();
 
   useEffect(() => {
-    // Asynchronously pre-warm SQLite database and local storage non-blocking
+    // Asynchronously pre-warm SQLite database, storage, and notification channels non-blocking
     getDatabase().catch((e) => console.error('Database pre-warm error:', e));
     fileService.initStorage().catch((e) => console.error('Storage pre-warm error:', e));
+    notificationService.init().catch((e) => console.error('Notification init error:', e));
+    timetableNotificationService.init().catch((e) => console.error('Timetable notification init error:', e));
+
+    // Handle cold-start notification tap
+    Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (response?.notification?.request?.content?.data) {
+        const data = response.notification.request.content.data;
+        notificationService.handleNotificationResponse(data, (screen, params) => {
+          navigate(screen as any, params);
+        });
+      }
+    });
+
+    // Handle background/foreground notification tap
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data;
+      notificationService.handleNotificationResponse(data, (screen, params) => {
+        navigate(screen as any, params);
+      });
+    });
+
+    return () => {
+      sub.remove();
+    };
   }, []);
 
   useEffect(() => {
@@ -36,6 +75,8 @@ function MainApp() {
   return (
     <View style={styles.rootContainer}>
       <NavigationContainer
+        ref={navigationRef}
+        linking={linking}
         theme={{
           dark: isDark,
           colors: {

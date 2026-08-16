@@ -1,4 +1,4 @@
-import { getDatabase } from '../database';
+import { getDatabase, sanitizeParams } from '../database';
 import { Tag } from '../../types/common';
 import { generateId } from '../../utils/id';
 
@@ -11,28 +11,33 @@ export const tagRepository = {
 
   async findOrCreate(name: string): Promise<Tag> {
     const db = await getDatabase();
-    const trimmed = name.trim().toLowerCase();
-    const existing = await db.getFirstAsync<any>(`SELECT * FROM tags WHERE LOWER(name) = ?`, [trimmed]);
+    const trimmed = (name || '').trim().toLowerCase();
+    const existing = await db.getFirstAsync<any>(
+      `SELECT * FROM tags WHERE LOWER(name) = ?`,
+      sanitizeParams([trimmed])
+    );
     if (existing) {
       return { id: existing.id, name: existing.name };
     }
 
     const id = generateId('tag');
-    await db.runAsync(`INSERT INTO tags (id, name) VALUES (?, ?)`, [id, name.trim()]);
+    await db.runAsync(`INSERT INTO tags (id, name) VALUES (?, ?)`, sanitizeParams([id, name.trim()]));
     return { id, name: name.trim() };
   },
 
   async setNoteTags(noteId: string, tagNames: string[]): Promise<void> {
+    if (!noteId) return;
     const db = await getDatabase();
-    await db.runAsync(`DELETE FROM note_tags WHERE noteId = ?`, [noteId]);
+    await db.runAsync(`DELETE FROM note_tags WHERE noteId = ?`, sanitizeParams([noteId]));
 
     for (const name of tagNames) {
-      if (!name.trim()) continue;
+      if (!name || !name.trim()) continue;
       const tag = await this.findOrCreate(name);
-      await db.runAsync(`INSERT OR IGNORE INTO note_tags (noteId, tagId) VALUES (?, ?)`, [
-        noteId,
-        tag.id,
-      ]);
+      await db.runAsync(
+        `INSERT OR IGNORE INTO note_tags (noteId, tagId) VALUES (?, ?)`,
+        sanitizeParams([noteId, tag.id])
+      );
     }
   },
 };
+

@@ -3,19 +3,22 @@ import { Subject } from '../types/subject';
 import { Folder } from '../types/folder';
 import { Note } from '../types/note';
 import { PdfDocument } from '../types/pdf';
+import { SavedLink } from '../types/savedLink';
+import { savedLinkRepository } from '../database/repositories/savedLinkRepository';
 
 export interface SearchResults {
   subjects: Subject[];
   folders: Folder[];
   notes: Note[];
   pdfs: PdfDocument[];
+  links: SavedLink[];
 }
 
 export const searchService = {
   async search(query: string): Promise<SearchResults> {
     const trimmed = query.trim().toLowerCase();
     if (!trimmed) {
-      return { subjects: [], folders: [], notes: [], pdfs: [] };
+      return { subjects: [], folders: [], notes: [], pdfs: [], links: [] };
     }
 
     const db = await getDatabase();
@@ -107,6 +110,9 @@ export const searchService = {
       folderName: r.folderName,
     }));
 
-    return { subjects, folders, notes, pdfs };
+    // 5. Search Saved Links
+    const links = await savedLinkRepository.search(trimmed);
+
+    return { subjects, folders, notes, pdfs, links };
   },
 };

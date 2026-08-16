@@ -37,6 +37,7 @@ import { LoadingState } from '../../components/common/LoadingState';
 import { ChatMessage } from '../../types/connect';
 import { connectService } from '../../services/connectService';
 import { chatService } from '../../services/chatService';
+import { presenceService } from '../../services/presenceService';
 
 const QUICK_EMOJIS = [
   '😊', '😂', '🤣', '❤️', '👍', '🔥', '🙏', '😍', '🥰', '😎',
@@ -89,7 +90,12 @@ export const ChatScreen: React.FC<Props> = ({ navigation, route }) => {
   const inputRef = useRef<TextInput>(null);
 
   useEffect(() => {
+    presenceService.setActiveChatPeer(peerId);
     loadActiveChat();
+
+    return () => {
+      presenceService.setActiveChatPeer(null);
+    };
   }, [peerId]);
 
   // Global Keyboard listeners for Android & iOS lifecycle events
@@ -526,7 +532,7 @@ export const ChatScreen: React.FC<Props> = ({ navigation, route }) => {
           <View style={[styles.e2eePill, { backgroundColor: isDark ? '#182229' : '#FFEECD' }]}>
             <Ionicons name="lock-closed" size={10} color={isDark ? '#F59E0B' : '#854D0E'} style={{ marginRight: 4 }} />
             <Text style={[styles.e2eePillText, { color: isDark ? '#F59E0B' : '#854D0E' }]}>
-              Messages and files are end-to-end encrypted. No one outside of this chat can read them.
+              Messages and files are client-side encrypted. Verify sensitive details out of band.
             </Text>
           </View>
         </View>

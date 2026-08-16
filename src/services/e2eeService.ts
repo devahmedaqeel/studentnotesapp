@@ -2,14 +2,20 @@ import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
 import * as FileSystem from 'expo-file-system/legacy';
 import { EncryptedPayload } from '../types/connect';
+import { uint8ArrayToBase64, base64ToUint8Array } from '../utils/binary';
 
 const MASTER_DEVICE_SEED_KEY = 'e2ee_studentnotes_device_master_seed';
 const IDENTITY_FINGERPRINT_KEY = 'e2ee_studentnotes_identity_fingerprint';
 
 /**
- * End-to-End Encryption (E2EE) Service.
- * Implements authenticated client-side encryption using hardware-backed SecureStore,
- * SHA-256 HMAC message authentication, and keystream-based authenticated encryption.
+ * Client-side message encryption service.
+ *
+ * This is intentionally described as client-side encryption rather than a
+ * production E2EE protocol: the project does not currently include an audited
+ * asymmetric key agreement implementation. The conversation key derivation is
+ * deterministic across both participants so realtime chat can decrypt on both
+ * devices, but it must be replaced with a real E2EE protocol before making
+ * strong end-to-end encryption claims.
  */
 export const e2eeService = {
   /**
@@ -46,12 +52,11 @@ export const e2eeService = {
   },
 
   /**
-   * Derives a unique 256-bit shared conversation key between two students.
+   * Derives a deterministic conversation key shared by both participants.
    */
   async deriveConversationKey(myUserId: string, peerUserId: string): Promise<string> {
-    const { masterSeed } = await this.initDeviceIdentity();
     const sortedIds = [myUserId, peerUserId].sort().join(':');
-    const combined = `${masterSeed}:${sortedIds}`;
+    const combined = `studentnotes-chat-v1:${sortedIds}`;
 
     const keyDigest = await Crypto.digestStringAsync(
       Crypto.CryptoDigestAlgorithm.SHA256,
@@ -238,29 +243,11 @@ export const e2eeService = {
   },
 
   bytesToBase64(bytes: number[]): string {
-    const uint8 = new Uint8Array(bytes);
-    let binary = '';
-    for (let i = 0; i < uint8.length; i++) {
-      binary += String.fromCharCode(uint8[i]);
-    }
-    // Base64 encoding via standard btoa or buffer
-    if (typeof btoa === 'function') {
-      return btoa(binary);
-    }
-    return Buffer.from(uint8).toString('base64');
+    return uint8ArrayToBase64(bytes);
   },
 
   base64ToBytes(base64: string): number[] {
-    let binary = '';
-    if (typeof atob === 'function') {
-      binary = atob(base64);
-    } else {
-      binary = Buffer.from(base64, 'base64').toString('binary');
-    }
-    const bytes: number[] = [];
-    for (let i = 0; i < binary.length; i++) {
-      bytes.push(binary.charCodeAt(i));
-    }
-    return bytes;
+    const uint8 = base64ToUint8Array(base64);
+    return Array.from(uint8);
   },
 };

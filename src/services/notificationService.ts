@@ -15,16 +15,53 @@ Notifications.setNotificationHandler({
 
 export const notificationService = {
   /**
-   * Initializes notification channels and requests permissions.
+   * Initializes all required Android notification channels and requests permissions.
    */
   async init(): Promise<boolean> {
     try {
       if (Platform.OS === 'android') {
+        // 1. Diary Deadlines Channel
         await Notifications.setNotificationChannelAsync('diary-deadlines', {
           name: 'Academic Deadlines & Diary',
           importance: Notifications.AndroidImportance.HIGH,
           vibrationPattern: [0, 250, 250, 250],
           lightColor: '#4F46E5',
+          sound: 'default',
+        });
+
+        // 2. Timetable & Classes Channel
+        await Notifications.setNotificationChannelAsync('timetable-schedule', {
+          name: 'University Timetable & Daily Schedule',
+          importance: Notifications.AndroidImportance.HIGH,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#F59E0B',
+          sound: 'default',
+        });
+
+        // 3. Chat & Messages Channel
+        await Notifications.setNotificationChannelAsync('messages', {
+          name: 'Student Chat & Direct Messages',
+          importance: Notifications.AndroidImportance.HIGH,
+          vibrationPattern: [0, 200, 200, 200],
+          lightColor: '#10B981',
+          sound: 'default',
+        });
+
+        // 4. Social & Follow Requests Channel
+        await Notifications.setNotificationChannelAsync('social-requests', {
+          name: 'Student Follow Requests & Social',
+          importance: Notifications.AndroidImportance.HIGH,
+          vibrationPattern: [0, 150, 150, 150],
+          lightColor: '#6366F1',
+          sound: 'default',
+        });
+
+        // 5. General Academic Reminders Channel
+        await Notifications.setNotificationChannelAsync('general-reminders', {
+          name: 'General Academic Reminders',
+          importance: Notifications.AndroidImportance.DEFAULT,
+          vibrationPattern: [0, 200, 200, 200],
+          lightColor: '#3B82F6',
           sound: 'default',
         });
       }
@@ -68,7 +105,7 @@ export const notificationService = {
   },
 
   /**
-   * Schedules reminders for an academic diary event.
+   * Schedules reminders for an academic diary event (assignment, exam, quiz, project).
    * Cancels old ones first to prevent duplicates.
    */
   async scheduleEventReminders(event: DiaryEvent): Promise<string[]> {
@@ -78,7 +115,7 @@ export const notificationService = {
     }
 
     // If completed or reminder disabled, do not schedule future notifications
-    if (event.status === 'completed' || !event.reminderEnabled) {
+    if (event.status === 'completed' || !event.reminderEnabled || event.reminderType === 'none') {
       return [];
     }
 
@@ -129,7 +166,7 @@ export const notificationService = {
           content: {
             title: `⏰ ${event.eventType.toUpperCase()}: ${event.title}`,
             body: `${event.title} is ${reminderLabel}! ${event.subjectName ? `(${event.subjectName})` : ''}`,
-            data: { eventId: event.id },
+            data: { eventId: event.id, type: 'diary_event' },
             sound: 'default',
           },
           trigger: {
@@ -147,7 +184,7 @@ export const notificationService = {
           content: {
             title: `🔴 DEADLINE TODAY: ${event.title}`,
             body: `Don't forget to submit your ${event.eventType}: ${event.title}!`,
-            data: { eventId: event.id },
+            data: { eventId: event.id, type: 'diary_event' },
             sound: 'default',
           },
           trigger: {
@@ -161,12 +198,11 @@ export const notificationService = {
 
       // 3. Daily reminder until completed
       if (event.dailyUntilCompleted && dueTime > now) {
-        // Daily trigger at 9:00 AM
         const id = await Notifications.scheduleNotificationAsync({
           content: {
             title: `📌 Daily Reminder: ${event.title}`,
             body: `Pending ${event.eventType}: Due on ${event.dueDate}. Tap to mark complete or review.`,
-            data: { eventId: event.id },
+            data: { eventId: event.id, type: 'diary_event' },
             sound: 'default',
           },
           trigger: {
@@ -183,5 +219,115 @@ export const notificationService = {
     }
 
     return scheduledIds;
+  },
+
+  /**
+   * Dispatches an in-app or local push notification when a new chat message arrives in background.
+   */
+  async scheduleLocalMessageNotification(
+    senderName: string,
+    messagePreview: string,
+    conversationId: string,
+    peerId: string
+  ): Promise<string | undefined> {
+    try {
+      const id = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: `💬 ${senderName}`,
+          body: messagePreview,
+          data: { conversationId, peerId, type: 'chat_message' },
+          sound: 'default',
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+          seconds: 1,
+          channelId: 'messages',
+        },
+      });
+      return id;
+    } catch (e) {
+      console.warn('Failed to schedule chat message notification:', e);
+      return undefined;
+    }
+  },
+
+  /**
+   * Dispatches a local notification for incoming follow requests.
+   */
+  async scheduleFollowRequestNotification(
+    requesterName: string,
+    requesterId: string
+  ): Promise<string | undefined> {
+    try {
+      const id = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: '👋 New Follow Request',
+          body: `${requesterName} wants to connect with you on Student Notes.`,
+          data: { requesterId, type: 'follow_request' },
+          sound: 'default',
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+          seconds: 1,
+          channelId: 'social-requests',
+        },
+      });
+      return id;
+    } catch (e) {
+      console.warn('Failed to schedule follow request notification:', e);
+      return undefined;
+    }
+  },
+
+  /**
+   * Dispatches a notification when a classmate shares a PDF.
+   */
+  async scheduleSharedPdfNotification(
+    senderName: string,
+    pdfTitle: string,
+    pdfId: string
+  ): Promise<string | undefined> {
+    try {
+      const id = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: '📄 PDF Shared with You',
+          body: `${senderName} shared "${pdfTitle}" with you. Tap to view.`,
+          data: { pdfId, type: 'shared_pdf' },
+          sound: 'default',
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+          seconds: 1,
+          channelId: 'social-requests',
+        },
+      });
+      return id;
+    } catch (e) {
+      console.warn('Failed to schedule shared PDF notification:', e);
+      return undefined;
+    }
+  },
+
+  /**
+   * Routes tapped notification response data directly to target screen.
+   */
+  handleNotificationResponse(data: any, navigateFn: (screen: string, params?: any) => void): void {
+    if (!data) return;
+
+    if (data.type === 'chat_message' && data.peerId) {
+      navigateFn('Chat', { peerId: data.peerId });
+    } else if (data.type === 'follow_request') {
+      navigateFn('FollowRequests');
+    } else if (data.type === 'shared_pdf' && data.pdfId) {
+      navigateFn('PdfViewer', { pdfId: data.pdfId });
+    } else if (data.type === 'diary_event' && data.eventId) {
+      navigateFn('DiaryEventDetail', { eventId: data.eventId });
+    } else if (data.type === 'timetable_class_alert' || data.type === 'timetable_daily_summary') {
+      navigateFn('MyTimetable');
+    } else if (data.eventId) {
+      navigateFn('DiaryEventDetail', { eventId: data.eventId });
+    } else if (data.classId) {
+      navigateFn('MyTimetable');
+    }
   },
 };
