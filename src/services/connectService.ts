@@ -502,7 +502,7 @@ export const connectService = {
       }
     } catch {}
 
-    // 3. Determine unique username from explicit choice or Name/Email
+    // 3. Determine unique username from explicit choice
     let chosenUsername = '';
     if (metadata?.username) {
       const cleanCustom = metadata.username.trim().replace(/^@/, '').toLowerCase();
@@ -512,30 +512,25 @@ export const connectService = {
       }
     }
 
+    // If no explicit username was chosen, do NOT auto-assign a username.
+    // The user MUST choose their own unique username on the onboarding screen.
     if (!chosenUsername) {
-      const rawName = (metadata?.fullName || metadata?.email?.split('@')[0] || 'student')
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, '')
-        .substring(0, 14);
-      const baseUsername = rawName.length >= 3 ? rawName : (rawName + 'stu').substring(0, 14);
-
-      let isUsernameUnique = false;
-      let attempt = 0;
-
-      while (!isUsernameUnique && attempt <= 50) {
-        const candidate = attempt === 0 ? baseUsername : `${baseUsername}${attempt}`;
-        const avail = await this.checkUsernameAvailability(candidate, userId);
-        if (avail.available) {
-          chosenUsername = candidate;
-          isUsernameUnique = true;
-          break;
-        }
-        attempt++;
-      }
-
-      if (!isUsernameUnique) {
-        chosenUsername = `student_${Math.floor(100000 + Math.random() * 900000)}`;
-      }
+      return (await this.getProfile(userId)) || {
+        id: userId,
+        username: '',
+        publicStudentId: existing?.publicStudentId || this.generatePublicStudentId(),
+        displayName: metadata?.fullName || 'Student',
+        avatarUrl: metadata?.avatarUrl,
+        program: metadata?.program,
+        semester: metadata?.semester,
+        university: metadata?.university,
+        onlineStatus: 'online',
+        lastSeen: 'Just now',
+        followersCount: 0,
+        followingCount: 0,
+        createdAt: now,
+        updatedAt: now,
+      };
     }
 
     // 4. Generate permanent unique Student ID (STU-XXXXXX)

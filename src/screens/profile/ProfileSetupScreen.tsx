@@ -180,15 +180,40 @@ export const ProfileSetupScreen: React.FC<Props> = ({ navigation, route }) => {
     }
 
     const cleanUser = username.trim().replace(/^@/, '').toLowerCase();
-    if (cleanUser && usernameStatus === 'taken') {
+    if (!cleanUser) {
+      Alert.alert('Username Required', 'Please choose a unique username to continue.');
+      return;
+    }
+
+    const val = connectService.validateUsername(cleanUser);
+    if (!val.isValid) {
+      Alert.alert('Invalid Username', val.error || 'Username must be 3-20 characters and contain only letters, numbers, and underscores.');
+      return;
+    }
+
+    if (usernameStatus === 'taken') {
       Alert.alert('Username Taken', `@${cleanUser} is already taken. Please choose another username.`);
       return;
     }
 
     setLoading(true);
     try {
-      // 1. Update Core Profile
+      // 1. Update Student Connect Profile and chosen username first (validates uniqueness)
+      if (user?.id) {
+        await connectService.saveProfile(user.id, {
+          username: cleanUser,
+          displayName: fullName.trim(),
+          university: university.trim(),
+          program: program.trim(),
+          semester: semester.trim(),
+          bio: bio.trim(),
+          avatarUrl,
+        });
+      }
+
+      // 2. Update Core Profile
       await updateProfile({
+        username: cleanUser,
         fullName: fullName.trim(),
         university: university.trim(),
         institution: university.trim(),
@@ -206,19 +231,6 @@ export const ProfileSetupScreen: React.FC<Props> = ({ navigation, route }) => {
         profileCompleted: true,
       });
 
-      // 2. Update Student Connect Profile and chosen username
-      if (user?.id) {
-        await connectService.saveProfile(user.id, {
-          username: cleanUser || undefined,
-          displayName: fullName.trim(),
-          university: university.trim(),
-          program: program.trim(),
-          semester: semester.trim(),
-          bio: bio.trim(),
-          avatarUrl,
-        });
-      }
-
       setLoading(false);
 
       if (isEditing) {
@@ -228,7 +240,14 @@ export const ProfileSetupScreen: React.FC<Props> = ({ navigation, route }) => {
       }
     } catch (err: any) {
       setLoading(false);
-      Alert.alert('Save Failed', err.message || 'Failed to save profile. Please check your connection.');
+      const isTaken = (err.message || '').toLowerCase().includes('already taken') || (err.message || '').toLowerCase().includes('unique');
+      if (isTaken) {
+        setUsernameStatus('taken');
+        setUsernameMessage(`@${cleanUser} is already taken.`);
+        Alert.alert('Username Taken', `@${cleanUser} is already taken. Please choose another username.`);
+      } else {
+        Alert.alert('Save Failed', err.message || 'Failed to save profile. Please check your connection.');
+      }
     }
   };
 

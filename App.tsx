@@ -73,7 +73,7 @@ function MainApp() {
   }, [loading]);
 
   return (
-    <View style={styles.rootContainer}>
+    <View style={[styles.rootContainer, { backgroundColor: theme.colors.background }]}>
       <NavigationContainer
         ref={navigationRef}
         linking={linking}

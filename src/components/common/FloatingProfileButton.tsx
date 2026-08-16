@@ -109,6 +109,7 @@ export const FloatingProfileButton: React.FC<FloatingProfileButtonProps> = ({
         style={[
           styles.button,
           {
+            backgroundColor: theme.colors.card,
             borderColor: ringColor,
             shadowColor: ringColor,
           },
@@ -143,7 +144,6 @@ const styles = StyleSheet.create({
     borderWidth: 2.5,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#0F172A',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.45,
     shadowRadius: 6,

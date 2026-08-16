@@ -68,10 +68,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [syncProgress, setSyncProgress] = useState({ status: '', current: 0, total: 0 });
   const [pendingPasswordReset, setPendingPasswordReset] = useState(false);
 
-  // Calculate if profile is completed
+  // Calculate if profile is completed: MUST have a valid unique username, full name, and institution
   const isProfileComplete = Boolean(
-    profile?.profileCompleted ||
-    (profile?.fullName && (profile?.university || profile?.institution))
+    profile?.profileCompleted &&
+    profile?.username &&
+    !profile.username.startsWith('student_') &&
+    profile.username.trim().length >= 3 &&
+    profile?.fullName &&
+    (profile?.university || profile?.institution)
   );
 
   const clearPendingPasswordReset = () => {
@@ -295,7 +299,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           avatarPreset: data.avatar_preset || 'male_student',
           avatarUrl: avatarToUse,
           ringColor: data.ring_color || parsed?.ringColor || '#6366F1',
-          profileCompleted: Boolean(data.profile_completed || (nameToUse && univ)),
+          profileCompleted: Boolean(
+            data.profile_completed &&
+            (connectUsername || parsed.username) &&
+            !(connectUsername || parsed.username)?.startsWith('student_')
+          ),
         };
         setProfile(builtProfile);
         // Persist to user-scoped key
@@ -305,10 +313,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const univ = parsed.university || parsed.institution || '';
         const nameToUse = googleName || parsed.fullName || userEmail.split('@')[0];
         const avatarToUse = googleAvatar || parsed.avatarUrl || undefined;
+        const validUser = (connectUsername || parsed.username) && !(connectUsername || parsed.username)?.startsWith('student_');
 
         const newProfile: UserProfile = {
           id: userId,
-          username: connectUsername || parsed.username,
+          username: validUser ? (connectUsername || parsed.username) : undefined,
           fullName: nameToUse,
           email: userEmail,
           department: parsed.department || '',
@@ -324,7 +333,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           avatarPreset: parsed.avatarPreset || 'male_student',
           avatarUrl: avatarToUse,
           ringColor: parsed.ringColor || '#6366F1',
-          profileCompleted: Boolean(parsed.profileCompleted || (nameToUse && univ)),
+          profileCompleted: Boolean(parsed.profileCompleted && validUser && (nameToUse && univ)),
         };
 
         setProfile(newProfile);

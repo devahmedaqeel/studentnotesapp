@@ -502,6 +502,10 @@ create table if not exists public.username_history (
 alter table public.student_profiles enable row level security;
 alter table public.username_history enable row level security;
 
+-- Case-insensitive unique indexes to guarantee global username uniqueness
+create unique index if not exists idx_student_profiles_lower_username on public.student_profiles (LOWER(username));
+create unique index if not exists idx_username_history_lower_username on public.username_history (LOWER(username));
+
 -- All authenticated students can search and view public student profiles
 create policy "Student profiles visible to authenticated users" on public.student_profiles
   for select using (auth.role() = 'authenticated');
