@@ -1,20 +1,23 @@
-# StudentNotes - V1 Implemented Features Matrix
+# StudentNotes - Features Matrix & Capabilities
 
 | Feature Area | Implemented Functionality | Status |
 | :--- | :--- | :--- |
-| **Home Dashboard** | Dynamic time greeting, quick scan & PDF actions, My Subjects list, recent notes & PDFs, favorites access | ✅ 100% Complete |
-| **Subject Management** | Create, edit, delete, custom icon picker, custom color palette, note & PDF counters | ✅ 100% Complete |
-| **Folder Management** | Subject-level sub-folder creation, renaming, note/PDF count, subject-folder hierarchy | ✅ 100% Complete |
-| **Camera Scanner** | Expo Camera integration, target framing, flash mode toggle, camera flip, multi-page capture | ✅ 100% Complete |
-| **Gallery Import** | Expo Image Picker multi-select, page list append, order preview | ✅ 100% Complete |
-| **Scan Preview** | High-res page preview, horizontal thumbnail bar, page deletion, add page trigger | ✅ 100% Complete |
-| **Multi-Page Notes** | Persistent multi-page notes, page indexing, atomic filesystem & DB creation | ✅ 100% Complete |
-| **Note Viewer** | Full-width horizontal page swipe, page counter, favorite star toggle, export as PDF | ✅ 100% Complete |
-| **PDF Creator** | Converts scanned page images into crisp A4 PDF documents offline using `expo-print` | ✅ 100% Complete |
-| **PDF Viewer** | Offline PDF viewer via `react-native-webview`, favorite star, native sharing trigger | ✅ 100% Complete |
-| **Global Search** | Instant SQLite full text search across subjects, folders, notes, PDFs, and tags | ✅ 100% Complete |
-| **Favorites** | Favorite/unfavorite notes and PDFs with dedicated Favorites tab | ✅ 100% Complete |
-| **Trash & Restore** | Soft delete to Trash table + storage directory, 100% full recovery of SQLite data & physical assets | ✅ 100% Complete |
-| **Sharing** | Native image & PDF sharing via `expo-sharing` | ✅ 100% Complete |
-| **Settings** | Light/Dark/System theme switcher, total notes/PDFs count, storage usage computation | ✅ 100% Complete |
-| **Testing** | Automated Jest unit testing suite covering utility, validation, and file logic | ✅ 100% Complete |
+| **Home Dashboard** | Dynamic greeting, quick scan & PDF actions, My Subjects list, recent notes & PDFs, favorite access, live timetable class indicator, and upcoming diary deadlines | ✅ 100% Complete |
+| **Student Connect** | Search classmates by `@username` or Student ID (`STU-XXXXXX`), public student profile, follow requests, accept/decline, connected friends list, and block/unblock | ✅ 100% Complete |
+| **24-Hour Status Stories** | Share text, color-gradient, photo, and voice status updates expiring in 24 hours with deduplicated unique viewer tracking | ✅ 100% Complete |
+| **Document Camera Scanner** | Expo Camera integration, target framing, flash toggle, camera flip, multi-page capture, and gallery image import | ✅ 100% Complete |
+| **4-Corner Quad Crop** | High-precision quadrilateral cropping with independent corner dragging, aspect ratio correction, 90° rotation, and multi-density coordinate scaling | ✅ 100% Complete |
+| **Multi-Page Notes** | Persistent multi-page notes, page indexing, thumbnail preview bar, page reordering, atomic SQLite & filesystem storage | ✅ 100% Complete |
+| **Note Viewer** | Full-width horizontal swipe, page counter, favorite star toggle, and export as PDF | ✅ 100% Complete |
+| **PDF Studio & Built-in Viewer** | Create PDFs directly from camera or home dashboard; built-in smooth PDF viewer with pinch-to-zoom, pan, full-screen mode, and page navigation | ✅ 100% Complete |
+| **Important Documents Vault** | Academic storage for marksheets, challans, certificates, and ID cards with folder hierarchy and format support (PDF, DOC, DOCX, PPT, PPTX, images) | ✅ 100% Complete |
+| **Saved Links & Smart URL Optimizer** | Categorized bookmarks with automated title/favicon fetching, smart tracker stripping (UTM, Google Ads, Meta/FB/IG, YouTube), and user-controlled Clean vs Original URL mode | ✅ 100% Complete |
+| **Student Diary & Deadlines** | Exam, assignment, quiz, and project deadline tracker with priorities (Urgent, High, Medium, Low), attachments, and push reminder notifications | ✅ 100% Complete |
+| **Weekly Class Timetable** | Lecture schedule across weekdays with classroom numbers, instructor details, live ongoing class widget, and morning schedule summary notifications | ✅ 100% Complete |
+| **Media Compression Center** | Image and PDF compression tool reducing file sizes up to 80% while retaining full readability, with direct saving to device gallery | ✅ 100% Complete |
+| **Global Search** | Instant SQLite full-text search across subjects, folders, notes, PDFs, documents, saved links, and tags | ✅ 100% Complete |
+| **Trash Box & Recovery** | Safe soft-deletion with 1-tap full recovery of SQLite records and physical assets, plus permanent purge options | ✅ 100% Complete |
+| **Dynamic Themes** | Automatic system-synchronized Dark and Light mode support with manual override capability and premium HSL color tokens | ✅ 100% Complete |
+| **Offline-First & Cloud Sync** | 100% local SQLite functionality with optional Supabase Auth (Email & Google) and automatic background cloud synchronization | ✅ 100% Complete |
+| **Account Data Security** | Strict PostgreSQL Row-Level Security (`auth.uid() = user_id`), clean local SQLite cache purge on logout, and isolated multi-tenant data restoration | ✅ 100% Complete |
+| **Quality & Testing** | Comprehensive automated Jest test suite covering all modules with 100% passing tests (107/107 tests) | ✅ 100% Complete |

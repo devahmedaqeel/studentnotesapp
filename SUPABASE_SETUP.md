@@ -1,6 +1,6 @@
 # SUPABASE SETUP & CONFIGURATION GUIDE
 
-This document provides step-by-step instructions to set up and configure your **Supabase Cloud Project** for StudentNotes optional cloud backup and synchronization.
+This document provides step-by-step instructions to configure your **Supabase Cloud Project** for StudentNotes cloud backup, authentication, and synchronization.
 
 ---
 
@@ -32,30 +32,35 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
 
 1. Go to your Supabase Dashboard -> **SQL Editor**.
 2. Click **New Query**.
-3. Copy and paste the complete contents of `supabase/migrations/001_initial_schema.sql` (or `SUPABASE_SCHEMA.sql`).
+3. Copy and paste the complete contents of `SUPABASE_SCHEMA.sql`.
 4. Click **Run**.
 
-This initializes the following tables with **Row Level Security (RLS)** policies enabled:
-- `profiles` (`id = auth.uid()`)
-- `subjects` (`user_id = auth.uid()`)
-- `folders` (`user_id = auth.uid()`)
-- `notes` (`user_id = auth.uid()`)
-- `note_pages` (`user_id = auth.uid()`)
-- `pdfs` (`user_id = auth.uid()`)
-- `tags` & `note_tags`
-- `trash` (`user_id = auth.uid()`)
+This initializes the tables with **Row Level Security (RLS)** policies enabled:
+- `profiles` & `student_profiles`
+- `subjects` & `folders`
+- `notes`, `note_pages`, `tags`, `note_tags`
+- `pdfs`
+- `documents` & `document_folders`
+- `diary_events` & `diary_attachments`
+- `timetable_classes` & `timetable_settings`
+- `saved_links`
+- `student_connections` & `student_blocked`
+- `student_statuses` & `status_views`
+- `username_history` & `user_privacy_settings`
 
 ---
 
 ## 4. Storage Buckets Setup
 
 1. Go to Supabase Dashboard -> **Storage**.
-2. Click **New Bucket** and create the following three buckets:
-   - Bucket Name: `note-files` (Public: **Yes**)
-   - Bucket Name: `pdf-files` (Public: **Yes**)
-   - Bucket Name: `avatars` (Public: **Yes**)
+2. Click **New Bucket** and create the following buckets:
+   - `note-files` (Public: **Yes**)
+   - `pdf-files` (Public: **Yes**)
+   - `avatars` (Public: **Yes**)
+   - `documents` (Public: **Yes**)
+   - `status-media` (Public: **Yes**)
 
-Storage access rules applied by `001_initial_schema.sql` ensure users can only upload to and manage their own folder path (`{userId}/*`).
+Storage access rules applied by `SUPABASE_SCHEMA.sql` ensure users can only upload to and manage their own folder path (`{userId}/*`).
 
 ---
 
@@ -64,7 +69,6 @@ Storage access rules applied by `001_initial_schema.sql` ensure users can only u
 ### Email & Password Authentication
 1. Go to **Authentication -> Providers -> Email**.
 2. Toggle **Enable Email provider**.
-3. (Optional) Disable **Confirm Email** if you want instant login during development.
 
 ### Google OAuth Authentication
 1. Go to **Authentication -> Providers -> Google**.
@@ -76,7 +80,7 @@ Storage access rules applied by `001_initial_schema.sql` ensure users can only u
 
 ## 6. Testing Cloud Backup & Sync
 
-1. Open StudentNotes in **Expo Go**.
+1. Open StudentNotes in **Expo Go** or native build.
 2. Tap **Create Account** or **Sign In**.
 3. Go to **Settings** or **Profile** and tap **Sync & Backup Now**.
-4. Check your Supabase Dashboard -> **Table Editor** (`notes`, `pdfs`) and **Storage** to confirm files and metadata are backed up cleanly.
+4. Check your Supabase Dashboard -> **Table Editor** and **Storage** to confirm files and metadata are backed up cleanly.

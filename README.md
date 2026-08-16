@@ -65,7 +65,9 @@
 
 ---
 
-### 🔗 7. Saved Links & Resource Hub
+### 🔗 7. Saved Links & Smart URL Optimizer
+- **Smart URL Cleaning**: Strips unnecessary marketing and advertising trackers (`utm_*`, `fbclid`, `gclid`, `msclkid`, `si`, `spm`, etc.) while strictly preserving functional parameters (`id`, `v`, `t`, `page`, `search`, `doc`).
+- **User Control & Visual Preview**: Choose between `Clean URL (Recommended)` and `Keep Original`, with a real-time comparison breakdown and badge inspection.
 - **Categorized Bookmarks**: Save academic research links, YouTube video lectures, coding documentation, and university portal bookmarks.
 - **Automated Metadata**: Auto-fetches page title, domain, favicon, and preview thumbnails from public URLs.
 - **Subject Filtering**: Tag and associate bookmarks with specific enrolled university courses.

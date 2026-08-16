@@ -384,7 +384,7 @@ create policy "Users can read other users privacy settings" on public.user_priva
   for select using (auth.role() = 'authenticated');
 
 -- STORAGE BUCKETS POLICIES
--- Note: Buckets 'note-files', 'pdf-files', 'avatars', 'documents', 'chat-attachments' in Storage
+-- Note: Buckets 'note-files', 'pdf-files', 'avatars', 'documents', 'status-media' in Storage
 
 -- Storage policies for note-files bucket
 create policy "Note files isolation" on storage.objects
