@@ -520,3 +520,35 @@ create policy "Username history visible to authenticated users" on public.userna
 
 create policy "Users insert username history" on public.username_history
   for insert with check (auth.uid() = user_id);
+
+-- 21. SAVED LINKS TABLE (Account-Specific Web Resources)
+create table if not exists public.saved_links (
+  id text not null,
+  user_id uuid references auth.users(id) on delete cascade not null,
+  original_url text not null,
+  cleaned_url text not null,
+  title text not null,
+  resource_type text not null,
+  custom_type text,
+  domain text not null,
+  favicon_url text,
+  preview_image_url text,
+  description text,
+  subject_id text,
+  subject_name text,
+  category text,
+  tags text default '[]',
+  personal_note text,
+  is_favorite boolean default false,
+  created_at bigint not null,
+  updated_at bigint not null,
+  primary key (id, user_id)
+);
+
+alter table public.saved_links enable row level security;
+
+create policy "Users manage own saved links" on public.saved_links
+  for all using (auth.uid() = user_id);
+
+create index if not exists idx_saved_links_user_id on public.saved_links(user_id);
+create index if not exists idx_saved_links_cleaned_url on public.saved_links(cleaned_url);

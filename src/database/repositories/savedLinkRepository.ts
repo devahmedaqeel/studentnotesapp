@@ -1,6 +1,7 @@
 import { getDatabase, sanitizeParams } from '../database';
 import { SavedLink, SavedLinkInput, ResourceType, LinkSortOption } from '../../types/savedLink';
 import { generateId } from '../../utils/id';
+import { supabase } from '../../services/supabase';
 
 export interface SavedLinkFilterOptions {
   resourceType?: ResourceType | 'all' | 'favorites';
@@ -234,6 +235,35 @@ export const savedLinkRepository = {
     if (!created) {
       throw new Error('Failed to create saved link record.');
     }
+
+    if (userId && userId !== 'guest_user') {
+      try {
+        await supabase.from('saved_links').upsert({
+          id,
+          user_id: userId,
+          original_url: input.originalUrl.trim(),
+          cleaned_url: input.cleanedUrl.trim(),
+          title: input.title.trim(),
+          resource_type: input.resourceType,
+          custom_type: input.customType || null,
+          domain: input.domain.toLowerCase().trim(),
+          favicon_url: input.faviconUrl || null,
+          preview_image_url: input.previewImageUrl || null,
+          description: input.description || null,
+          subject_id: input.subjectId || null,
+          subject_name: input.subjectName || null,
+          category: input.category || null,
+          tags: tagsJson,
+          personal_note: input.personalNote || null,
+          is_favorite: input.favorite ? true : false,
+          created_at: now,
+          updated_at: now,
+        });
+      } catch (e) {
+        console.warn('Cloud link sync notice:', e);
+      }
+    }
+
     return created;
   },
 
@@ -304,6 +334,33 @@ export const savedLinkRepository = {
       ])
     );
 
+    if (existing.userId && existing.userId !== 'guest_user') {
+      try {
+        await supabase.from('saved_links').upsert({
+          id,
+          user_id: existing.userId,
+          original_url: originalUrl,
+          cleaned_url: cleanedUrl,
+          title,
+          resource_type: resourceType,
+          custom_type: customType || null,
+          domain,
+          favicon_url: faviconUrl || null,
+          preview_image_url: previewImageUrl || null,
+          description: description || null,
+          subject_id: subjectId || null,
+          subject_name: subjectName || null,
+          category: category || null,
+          tags: tagsJson,
+          personal_note: personalNote || null,
+          is_favorite: Boolean(favorite),
+          updated_at: now,
+        });
+      } catch (e) {
+        console.warn('Cloud link update sync notice:', e);
+      }
+    }
+
     return this.getById(id);
   },
 
@@ -317,10 +374,21 @@ export const savedLinkRepository = {
 
     const db = await getDatabase();
     const newFav = !existing.favorite;
+    const now = Date.now();
     await db.runAsync(
       `UPDATE saved_links SET favorite = ?, updatedAt = ? WHERE id = ?`,
-      sanitizeParams([newFav ? 1 : 0, Date.now(), id])
+      sanitizeParams([newFav ? 1 : 0, now, id])
     );
+
+    if (existing.userId && existing.userId !== 'guest_user') {
+      try {
+        await supabase
+          .from('saved_links')
+          .update({ is_favorite: newFav, updated_at: now })
+          .eq('id', id);
+      } catch (e) {}
+    }
+
     return newFav;
   },
 
@@ -329,8 +397,15 @@ export const savedLinkRepository = {
    */
   async delete(id: string): Promise<boolean> {
     if (!id) return false;
+    const existing = await this.getById(id);
     const db = await getDatabase();
     await db.runAsync(`DELETE FROM saved_links WHERE id = ?`, sanitizeParams([id]));
+
+    if (existing?.userId && existing.userId !== 'guest_user') {
+      try {
+        await supabase.from('saved_links').delete().eq('id', id);
+      } catch (e) {}
+    }
     return true;
   },
 

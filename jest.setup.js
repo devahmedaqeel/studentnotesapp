@@ -110,3 +110,36 @@ jest.mock('expo-media-library', () => ({
   createAlbumAsync: jest.fn(() => Promise.resolve({ id: 'mock-album-123' })),
   addAssetsToAlbumAsync: jest.fn(() => Promise.resolve(true)),
 }));
+
+jest.mock('expo-notifications', () => ({
+  setNotificationHandler: jest.fn(),
+  scheduleNotificationAsync: jest.fn(() => Promise.resolve('notif_123')),
+  cancelScheduledNotificationAsync: jest.fn(() => Promise.resolve()),
+  requestPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'granted', granted: true })),
+  getPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'granted', granted: true })),
+  setNotificationChannelAsync: jest.fn(() => Promise.resolve()),
+  AndroidImportance: { MAX: 5, HIGH: 4, DEFAULT: 3 },
+}));
+
+jest.mock('expo-av', () => ({
+  Audio: {
+    Recording: jest.fn().mockImplementation(() => ({
+      prepareToRecordAsync: jest.fn(() => Promise.resolve()),
+      startAsync: jest.fn(() => Promise.resolve()),
+      stopAndUnloadAsync: jest.fn(() => Promise.resolve()),
+      getURI: jest.fn(() => 'file:///mock/audio.m4a'),
+    })),
+    Sound: jest.fn().mockImplementation(() => ({
+      loadAsync: jest.fn(() => Promise.resolve()),
+      playAsync: jest.fn(() => Promise.resolve()),
+      stopAsync: jest.fn(() => Promise.resolve()),
+      unloadAsync: jest.fn(() => Promise.resolve()),
+    })),
+    setAudioModeAsync: jest.fn(() => Promise.resolve()),
+  },
+}));
+
+jest.mock('expo-camera', () => ({
+  CameraView: () => null,
+  useCameraPermissions: () => [{ granted: true }, jest.fn()],
+}));
