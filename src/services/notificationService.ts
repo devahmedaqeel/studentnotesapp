@@ -38,16 +38,7 @@ export const notificationService = {
           sound: 'default',
         });
 
-        // 3. Social & Follow Requests Channel
-        await Notifications.setNotificationChannelAsync('social-requests', {
-          name: 'Student Follow Requests & Social',
-          importance: Notifications.AndroidImportance.HIGH,
-          vibrationPattern: [0, 150, 150, 150],
-          lightColor: '#6366F1',
-          sound: 'default',
-        });
-
-        // 4. General Academic Reminders Channel
+        // 3. General Academic Reminders Channel
         await Notifications.setNotificationChannelAsync('general-reminders', {
           name: 'General Academic Reminders',
           importance: Notifications.AndroidImportance.DEFAULT,
@@ -99,100 +90,116 @@ export const notificationService = {
    * Schedules reminders for an academic diary event (assignment, exam, quiz, project).
    * Cancels old ones first to prevent duplicates.
    */
-  async scheduleEventReminders(event: DiaryEvent): Promise<string[]> {
-    // 1. Cancel previous notifications if any
-    if (event.notificationIds && event.notificationIds.length > 0) {
-      await this.cancelReminders(event.notificationIds);
+  async scheduleDiaryEventReminders(
+    event: DiaryEvent,
+    oldNotificationIds?: string[]
+  ): Promise<string[]> {
+    if (oldNotificationIds && oldNotificationIds.length > 0) {
+      await this.cancelReminders(oldNotificationIds);
     }
 
-    // If completed or reminder disabled, do not schedule future notifications
-    if (event.status === 'completed' || !event.reminderEnabled || event.reminderType === 'none') {
+    if (!event.reminderEnabled || event.status === 'completed') {
       return [];
     }
 
     const scheduledIds: string[] = [];
+    const dueTimeMs = event.dueTimestamp;
     const now = Date.now();
-    const dueTime = event.dueTimestamp;
+
+    const eventEmojiMap: Record<string, string> = {
+      assignment: '📝',
+      quiz: '✍️',
+      midterm: '📚',
+      final: '🎓',
+      project: '💼',
+      presentation: '📊',
+      general: '📌',
+    };
+    const emoji = eventEmojiMap[event.eventType] || '📌';
 
     try {
-      // 1. Reminder based on reminderType
-      let triggerOffsetMs = 0;
-      let reminderLabel = 'due';
+      // 1. Primary reminder trigger
+      let primaryTriggerMs = 0;
+      let primaryLabel = '';
 
       switch (event.reminderType) {
+        case 'at_due_time':
+          primaryTriggerMs = dueTimeMs;
+          primaryLabel = 'is due now!';
+          break;
         case '10_min':
-          triggerOffsetMs = 10 * 60 * 1000;
-          reminderLabel = 'due in 10 minutes';
+          primaryTriggerMs = dueTimeMs - 10 * 60 * 1000;
+          primaryLabel = 'is due in 10 minutes!';
           break;
         case '30_min':
-          triggerOffsetMs = 30 * 60 * 1000;
-          reminderLabel = 'due in 30 minutes';
+          primaryTriggerMs = dueTimeMs - 30 * 60 * 1000;
+          primaryLabel = 'is due in 30 minutes!';
           break;
         case '1_hour':
-          triggerOffsetMs = 60 * 60 * 1000;
-          reminderLabel = 'due in 1 hour';
-          break;
-        case '1_day':
-          triggerOffsetMs = 24 * 60 * 60 * 1000;
-          reminderLabel = 'due tomorrow';
+          primaryTriggerMs = dueTimeMs - 60 * 60 * 1000;
+          primaryLabel = 'is due in 1 hour!';
           break;
         case '3_days':
-          triggerOffsetMs = 3 * 24 * 60 * 60 * 1000;
-          reminderLabel = 'due in 3 days';
+          primaryTriggerMs = dueTimeMs - 3 * 24 * 60 * 60 * 1000;
+          primaryLabel = 'is due in 3 days!';
           break;
         case '7_days':
-          triggerOffsetMs = 7 * 24 * 60 * 60 * 1000;
-          reminderLabel = 'due in 7 days';
+          primaryTriggerMs = dueTimeMs - 7 * 24 * 60 * 60 * 1000;
+          primaryLabel = 'is due in 7 days!';
           break;
-        case 'at_due_time':
+        case '1_day':
         default:
-          triggerOffsetMs = 0;
-          reminderLabel = 'due now';
+          primaryTriggerMs = dueTimeMs - 24 * 60 * 60 * 1000;
+          primaryLabel = 'is due tomorrow!';
           break;
       }
 
-      const primaryTriggerTime = dueTime - triggerOffsetMs;
-      if (primaryTriggerTime > now) {
+      if (primaryTriggerMs > now) {
         const id = await Notifications.scheduleNotificationAsync({
           content: {
-            title: `⏰ ${event.eventType.toUpperCase()}: ${event.title}`,
-            body: `${event.title} is ${reminderLabel}! ${event.subjectName ? `(${event.subjectName})` : ''}`,
+            title: `${emoji} Academic Deadline Reminder`,
+            body: `"${event.title}" ${primaryLabel}`,
             data: { eventId: event.id, type: 'diary_event' },
             sound: 'default',
+            priority: Notifications.AndroidNotificationPriority.HIGH,
           },
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.DATE,
-            date: new Date(primaryTriggerTime),
+            date: new Date(primaryTriggerMs),
             channelId: 'diary-deadlines',
           },
         });
         scheduledIds.push(id);
       }
 
-      // 2. Day-of / Final Deadline Reminder
-      if (triggerOffsetMs !== 0 && dueTime > now) {
+      // 2. High priority alert on morning of due date (9:00 AM)
+      const morningOfDueDate = new Date(dueTimeMs);
+      morningOfDueDate.setHours(9, 0, 0, 0);
+      const morningMs = morningOfDueDate.getTime();
+
+      if (morningMs > now && morningMs < dueTimeMs && Math.abs(morningMs - primaryTriggerMs) > 2 * 60 * 60 * 1000) {
         const id = await Notifications.scheduleNotificationAsync({
           content: {
-            title: `🔴 DEADLINE TODAY: ${event.title}`,
-            body: `Don't forget to submit your ${event.eventType}: ${event.title}!`,
+            title: `⚠️ Due Today: ${event.title}`,
+            body: `Don't forget to submit "${event.title}" today by ${event.dueTime || 'end of day'}.`,
             data: { eventId: event.id, type: 'diary_event' },
             sound: 'default',
           },
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.DATE,
-            date: new Date(dueTime),
+            date: new Date(morningMs),
             channelId: 'diary-deadlines',
           },
         });
         scheduledIds.push(id);
       }
 
-      // 3. Daily reminder until completed
-      if (event.dailyUntilCompleted && dueTime > now) {
+      // 3. Daily recurring morning reminder if enabled
+      if (event.dailyUntilCompleted && dueTimeMs > now) {
         const id = await Notifications.scheduleNotificationAsync({
           content: {
-            title: `📌 Daily Reminder: ${event.title}`,
-            body: `Pending ${event.eventType}: Due on ${event.dueDate}. Tap to mark complete or review.`,
+            title: `⏳ Pending Task: ${event.title}`,
+            body: `Keep making progress on "${event.title}". Due on ${event.dueDate}.`,
             data: { eventId: event.id, type: 'diary_event' },
             sound: 'default',
           },
@@ -213,60 +220,13 @@ export const notificationService = {
   },
 
   /**
-   * Dispatches a local notification for incoming follow requests.
+   * Alias for scheduleDiaryEventReminders
    */
-  async scheduleFollowRequestNotification(
-    requesterName: string,
-    requesterId: string
-  ): Promise<string | undefined> {
-    try {
-      const id = await Notifications.scheduleNotificationAsync({
-        content: {
-          title: '👋 New Follow Request',
-          body: `${requesterName} wants to connect with you on Student Notes.`,
-          data: { requesterId, type: 'follow_request' },
-          sound: 'default',
-        },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-          seconds: 1,
-          channelId: 'social-requests',
-        },
-      });
-      return id;
-    } catch (e) {
-      console.warn('Failed to schedule follow request notification:', e);
-      return undefined;
-    }
-  },
-
-  /**
-   * Dispatches a notification when a classmate shares a PDF.
-   */
-  async scheduleSharedPdfNotification(
-    senderName: string,
-    pdfTitle: string,
-    pdfId: string
-  ): Promise<string | undefined> {
-    try {
-      const id = await Notifications.scheduleNotificationAsync({
-        content: {
-          title: '📄 PDF Shared with You',
-          body: `${senderName} shared "${pdfTitle}" with you. Tap to view.`,
-          data: { pdfId, type: 'shared_pdf' },
-          sound: 'default',
-        },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-          seconds: 1,
-          channelId: 'social-requests',
-        },
-      });
-      return id;
-    } catch (e) {
-      console.warn('Failed to schedule shared PDF notification:', e);
-      return undefined;
-    }
+  async scheduleEventReminders(
+    event: DiaryEvent,
+    oldNotificationIds?: string[]
+  ): Promise<string[]> {
+    return this.scheduleDiaryEventReminders(event, oldNotificationIds);
   },
 
   /**
@@ -275,9 +235,7 @@ export const notificationService = {
   handleNotificationResponse(data: any, navigateFn: (screen: string, params?: any) => void): void {
     if (!data) return;
 
-    if (data.type === 'follow_request') {
-      navigateFn('FollowRequests');
-    } else if (data.type === 'shared_pdf' && data.pdfId) {
+    if (data.type === 'shared_pdf' && data.pdfId) {
       navigateFn('PdfViewer', { pdfId: data.pdfId });
     } else if (data.type === 'diary_event' && data.eventId) {
       navigateFn('DiaryEventDetail', { eventId: data.eventId });

@@ -49,16 +49,5 @@ export type RootStackParamList = {
   TermsPrivacyConsent: undefined;
   TermsAndConditions: undefined;
   PrivacyPolicy: undefined;
-  Inbox: undefined;
-  StudentSearch: undefined;
-  StudentProfile: { userId: string };
-  MyFriends: { userId?: string } | undefined;
-  Followers: { userId?: string } | undefined;
-  Following: { userId?: string } | undefined;
-  FollowRequests: undefined;
-  SentRequests: undefined;
-  CreateStatus: undefined;
-  StatusViewer: { statuses: any[]; initialIndex?: number };
-  UsernameSettings: undefined;
-  BlockedStudents: undefined;
 };
+

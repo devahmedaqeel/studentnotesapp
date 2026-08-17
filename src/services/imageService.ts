@@ -108,37 +108,18 @@ export const imageService = {
   async compressImage(
     uri: string,
     level: CompressionLevel = 'balanced'
-  ): Promise<{ uri: string; originalSize: number; compressedSize: number }> {
-    const qualityMap: Record<CompressionLevel, number> = {
-      high_quality: 0.85,
-      balanced: 0.65,
-      compact: 0.45,
-    };
+  ): Promise<{ uri: string; originalSize: number; compressedSize: number; savedPercentage: number }> {
+    const { imageCompressionService, DEFAULT_IMAGE_PRESETS } = require('./imageCompressionService');
+    const presetKey = level === 'high_quality' ? 'high_quality' : level === 'compact' ? 'small' : 'balanced';
+    const config = DEFAULT_IMAGE_PRESETS[presetKey];
 
-    const targetQuality = qualityMap[level];
-
-    const result = await ImageManipulator.manipulateAsync(uri, [], {
-      compress: targetQuality,
-      format: ImageManipulator.SaveFormat.JPEG,
-    });
-
-    let originalSize = 0;
-    let compressedSize = 0;
-
-    try {
-      const origInfo = await FileSystem.getInfoAsync(uri);
-      const compInfo = await FileSystem.getInfoAsync(result.uri);
-      originalSize = (origInfo as any).size || 0;
-      compressedSize = (compInfo as any).size || 0;
-    } catch {
-      originalSize = 0;
-      compressedSize = 0;
-    }
+    const result = await imageCompressionService.compressImage(uri, config);
 
     return {
       uri: result.uri,
-      originalSize,
-      compressedSize,
+      originalSize: result.originalSize,
+      compressedSize: result.compressedSize,
+      savedPercentage: result.savedPercentage,
     };
   },
 

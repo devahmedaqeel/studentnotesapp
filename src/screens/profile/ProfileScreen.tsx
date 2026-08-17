@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -7,52 +7,21 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
-  FlatList,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
 import { useTheme } from '../../hooks/useTheme';
 import { useAuth } from '../../hooks/useAuth';
-import { useConnect } from '../../hooks/useConnect';
 import { AppHeader } from '../../components/common/AppHeader';
 import { AppButton } from '../../components/common/AppButton';
 import { Ionicons } from '@expo/vector-icons';
 import { AVATAR_PRESETS } from '../../components/common/AvatarSelector';
-import { connectService } from '../../services/connectService';
-import { StudentConnectProfile } from '../../types/connect';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Profile'>;
 
 export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const { theme, isDark } = useTheme();
   const { isOffline, user, profile, logout, syncNow, syncing, syncProgress } = useAuth();
-  const { myProfile } = useConnect();
-  const myUserId = user?.id || profile?.id || 'guest_user';
-
-  const [counts, setCounts] = useState({
-    friendsCount: 0,
-    requestsCount: 0,
-    sentCount: 0,
-  });
-  const [friendsList, setFriendsList] = useState<StudentConnectProfile[]>([]);
-
-  const loadConnectionsData = useCallback(async () => {
-    try {
-      const c = await connectService.getConnectionCounts(myUserId);
-      setCounts(c);
-      const friends = await connectService.getFriends(myUserId);
-      setFriendsList(friends.slice(0, 5));
-    } catch {
-      // Offline fallback
-    }
-  }, [myUserId]);
-
-  useFocusEffect(
-    useCallback(() => {
-      loadConnectionsData();
-    }, [loadConnectionsData])
-  );
 
   const handleSync = async () => {
     const ok = await syncNow();
@@ -88,7 +57,6 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
 
   const presetData = getPresetData();
   const univDisplay = profile?.university || profile?.institution || 'Not specified';
-  const ringColor = profile?.ringColor || theme.colors.primary;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -106,54 +74,17 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Top Profile Card */}
         <View style={[styles.profileCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.borderLight }]}>
-          <View
-            style={[
-              styles.avatarContainer,
-              {
-                borderColor: ringColor,
-                shadowColor: ringColor,
-              },
-            ]}
-          >
+          <View style={[styles.avatarContainer, { borderColor: theme.colors.primary, backgroundColor: presetData.bg }]}>
             {profile?.avatarUrl ? (
               <Image source={{ uri: profile.avatarUrl }} style={styles.avatar} />
             ) : (
-              <View style={[styles.avatarFallback, { backgroundColor: presetData.bg }]}>
-                <Text style={{ fontSize: 42 }}>{presetData.emoji}</Text>
-              </View>
+              <Text style={{ fontSize: 44 }}>{presetData.emoji}</Text>
             )}
           </View>
 
-          <Text style={[theme.typography.h2, { color: theme.colors.text, marginTop: 12, textAlign: 'center' }]}>
+          <Text style={[theme.typography.h2, { color: theme.colors.text, marginTop: 14, textAlign: 'center' }]}>
             {profile?.fullName || 'Student User'}
           </Text>
-
-          {myProfile?.username && !myProfile.username.startsWith('student_') ? (
-            <TouchableOpacity
-              onPress={() => navigation.navigate('UsernameSettings')}
-              style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}
-            >
-              <Text style={{ color: theme.colors.primary, fontSize: 14, fontWeight: '800' }}>
-                @{myProfile.username}
-              </Text>
-              <Ionicons name="pencil" size={12} color={theme.colors.primary} style={{ marginLeft: 4 }} />
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              onPress={() => navigation.navigate('UsernameSettings')}
-              style={{
-                marginTop: 6,
-                paddingHorizontal: 10,
-                paddingVertical: 4,
-                borderRadius: 12,
-                backgroundColor: theme.colors.primaryLight,
-              }}
-            >
-              <Text style={{ color: theme.colors.primary, fontSize: 12, fontWeight: '700' }}>
-                + Create Unique Username
-              </Text>
-            </TouchableOpacity>
-          )}
 
           <Text style={[theme.typography.body2, { color: theme.colors.textSecondary, marginTop: 4, textAlign: 'center' }]}>
             {profile?.email || (isOffline ? 'Offline Device User' : user?.email)}
@@ -188,114 +119,12 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </View>
 
-        {/* CONNECTIONS DASHBOARD */}
-        <View style={styles.sectionHeader}>
-          <Text style={[theme.typography.subtitle1, { color: theme.colors.text }]}>CONNECTIONS</Text>
-        </View>
-
-        <View style={styles.dashboardGrid}>
-          {/* Friends Count Card */}
-          <TouchableOpacity
-            activeOpacity={0.85}
-            style={[styles.dashCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.borderLight }]}
-            onPress={() => navigation.navigate('MyFriends')}
-          >
-            <View style={[styles.dashIconBox, { backgroundColor: 'rgba(16, 185, 129, 0.12)' }]}>
-              <Ionicons name="people" size={20} color="#10B981" />
-            </View>
-            <Text style={[styles.dashCount, { color: theme.colors.text }]}>{counts.friendsCount}</Text>
-            <Text style={[styles.dashLabel, { color: theme.colors.textSecondary }]}>Friends</Text>
-          </TouchableOpacity>
-
-          {/* Incoming Requests Count Card */}
-          <TouchableOpacity
-            activeOpacity={0.85}
-            style={[styles.dashCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.borderLight }]}
-            onPress={() => navigation.navigate('FollowRequests')}
-          >
-            <View style={[styles.dashIconBox, { backgroundColor: 'rgba(99, 102, 241, 0.12)' }]}>
-              <Ionicons name="person-add" size={20} color="#6366F1" />
-            </View>
-            <Text style={[styles.dashCount, { color: theme.colors.text }]}>{counts.requestsCount}</Text>
-            <Text style={[styles.dashLabel, { color: theme.colors.textSecondary }]}>Requests</Text>
-          </TouchableOpacity>
-
-          {/* Sent Requests Count Card */}
-          <TouchableOpacity
-            activeOpacity={0.85}
-            style={[styles.dashCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.borderLight }]}
-            onPress={() => navigation.navigate('SentRequests')}
-          >
-            <View style={[styles.dashIconBox, { backgroundColor: 'rgba(245, 158, 11, 0.12)' }]}>
-              <Ionicons name="paper-plane" size={20} color="#F59E0B" />
-            </View>
-            <Text style={[styles.dashCount, { color: theme.colors.text }]}>{counts.sentCount}</Text>
-            <Text style={[styles.dashLabel, { color: theme.colors.textSecondary }]}>Sent</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Friends Quick Preview */}
-        {friendsList.length > 0 && (
-          <View style={[styles.friendsPreviewBox, { backgroundColor: theme.colors.card, borderColor: theme.colors.borderLight }]}>
-            <View style={styles.friendsPreviewHeader}>
-              <Text style={[styles.friendsPreviewTitle, { color: theme.colors.text }]}>My Friends</Text>
-              <TouchableOpacity onPress={() => navigation.navigate('MyFriends')}>
-                <Text style={[styles.viewAllText, { color: theme.colors.primary }]}>View All ({counts.friendsCount})</Text>
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.friendsScroll}>
-              {friendsList.map((friend) => (
-                <TouchableOpacity
-                  key={friend.id}
-                  activeOpacity={0.85}
-                  style={styles.friendThumbCol}
-                  onPress={() => navigation.navigate('StudentProfile', { userId: friend.id })}
-                >
-                  <View style={styles.friendThumbAvatarWrap}>
-                    {friend.avatarUrl ? (
-                      <Image source={{ uri: friend.avatarUrl }} style={styles.friendThumbAvatar} />
-                    ) : (
-                      <View style={[styles.friendThumbPlaceholder, { backgroundColor: theme.colors.primaryLight }]}>
-                        <Text style={[styles.friendThumbInitial, { color: theme.colors.primary }]}>
-                          {friend.displayName.charAt(0).toUpperCase()}
-                        </Text>
-                      </View>
-                    )}
-                    {friend.onlineStatus === 'online' && <View style={styles.thumbOnlineDot} />}
-                  </View>
-                  <Text style={[styles.friendThumbName, { color: theme.colors.text }]} numberOfLines={1}>
-                    {friend.displayName.split(' ')[0]}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
         {/* Academic Details Section */}
-        <View style={[styles.sectionHeader, { marginTop: 20 }]}>
+        <View style={styles.sectionHeader}>
           <Text style={[theme.typography.subtitle1, { color: theme.colors.text }]}>Academic Information</Text>
         </View>
 
         <View style={[styles.infoBox, { backgroundColor: theme.colors.card, borderColor: theme.colors.borderLight }]}>
-          {/* Public Student ID */}
-          <TouchableOpacity
-            style={styles.infoRow}
-            onPress={() => navigation.navigate('UsernameSettings')}
-          >
-            <Ionicons name="card-outline" size={20} color={theme.colors.primary} style={{ marginRight: 12 }} />
-            <View style={{ flex: 1 }}>
-              <Text style={[theme.typography.caption, { color: theme.colors.textSecondary }]}>Public Student ID</Text>
-              <Text style={[theme.typography.body1, { color: '#10B981', fontWeight: '800' }]}>
-                {myProfile?.publicStudentId || 'STU-000000'}
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color={theme.colors.textMuted} />
-          </TouchableOpacity>
-
-          <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
-
           {/* University / Institution */}
           <View style={styles.infoRow}>
             <Ionicons name="business-outline" size={20} color={theme.colors.primary} style={{ marginRight: 12 }} />
@@ -468,26 +297,18 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   avatarContainer: {
-    marginBottom: 4,
-    borderWidth: 3,
-    borderRadius: 50,
-    padding: 3,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 8,
-    elevation: 6,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    borderWidth: 2.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
   },
   avatar: {
     width: 88,
     height: 88,
     borderRadius: 44,
-  },
-  avatarFallback: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   modeBadgeWrapper: {
     marginTop: 12,
@@ -501,99 +322,6 @@ const styles = StyleSheet.create({
   },
   sectionHeader: {
     marginBottom: 10,
-  },
-  dashboardGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 16,
-  },
-  dashCard: {
-    width: '48%',
-    padding: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  dashIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  dashCount: {
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  dashLabel: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  friendsPreviewBox: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 14,
-    marginBottom: 16,
-  },
-  friendsPreviewHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  friendsPreviewTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  viewAllText: {
-    fontSize: 12.5,
-    fontWeight: '700',
-  },
-  friendsScroll: {
-    gap: 14,
-  },
-  friendThumbCol: {
-    alignItems: 'center',
-    width: 58,
-  },
-  friendThumbAvatarWrap: {
-    width: 48,
-    height: 48,
-    position: 'relative',
-    marginBottom: 4,
-  },
-  friendThumbAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-  },
-  friendThumbPlaceholder: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  friendThumbInitial: {
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  thumbOnlineDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#10B981',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-  },
-  friendThumbName: {
-    fontSize: 11,
-    textAlign: 'center',
   },
   infoBox: {
     borderRadius: 14,

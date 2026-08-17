@@ -47,18 +47,6 @@ import { AddClassScreen } from '../screens/timetable/AddClassScreen';
 import { TimetableSettingsScreen } from '../screens/timetable/TimetableSettingsScreen';
 import { SavedLinksScreen } from '../screens/links/SavedLinksScreen';
 import { SaveLinkScreen } from '../screens/links/SaveLinkScreen';
-import { InboxScreen } from '../screens/connect/InboxScreen';
-import { StudentSearchScreen } from '../screens/connect/StudentSearchScreen';
-import { StudentProfileScreen } from '../screens/connect/StudentProfileScreen';
-import { MyFriendsScreen } from '../screens/connect/MyFriendsScreen';
-import { FollowersScreen } from '../screens/connect/FollowersScreen';
-import { FollowingScreen } from '../screens/connect/FollowingScreen';
-import { FollowRequestsScreen } from '../screens/connect/FollowRequestsScreen';
-import { SentRequestsScreen } from '../screens/connect/SentRequestsScreen';
-import { CreateStatusScreen } from '../screens/connect/CreateStatusScreen';
-import { StatusViewerScreen } from '../screens/connect/StatusViewerScreen';
-import { UsernameSettingsScreen } from '../screens/profile/UsernameSettingsScreen';
-import { BlockedStudentsScreen } from '../screens/connect/BlockedStudentsScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -138,20 +126,6 @@ export const RootNavigator: React.FC = () => {
       <Stack.Screen name="TimetableSettings" component={TimetableSettingsScreen} />
       <Stack.Screen name="SavedLinks" component={SavedLinksScreen} />
       <Stack.Screen name="SaveLink" component={SaveLinkScreen} />
-      
-      {/* Connect Screens */}
-      <Stack.Screen name="Inbox" component={InboxScreen} />
-      <Stack.Screen name="StudentSearch" component={StudentSearchScreen} />
-      <Stack.Screen name="StudentProfile" component={StudentProfileScreen} />
-      <Stack.Screen name="MyFriends" component={MyFriendsScreen} />
-      <Stack.Screen name="Followers" component={FollowersScreen} />
-      <Stack.Screen name="Following" component={FollowingScreen} />
-      <Stack.Screen name="FollowRequests" component={FollowRequestsScreen} />
-      <Stack.Screen name="SentRequests" component={SentRequestsScreen} />
-      <Stack.Screen name="CreateStatus" component={CreateStatusScreen} />
-      <Stack.Screen name="StatusViewer" component={StatusViewerScreen} />
-      <Stack.Screen name="UsernameSettings" component={UsernameSettingsScreen} />
-      <Stack.Screen name="BlockedStudents" component={BlockedStudentsScreen} />
     </Stack.Navigator>
   );
 };

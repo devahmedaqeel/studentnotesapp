@@ -1,8 +1,7 @@
-import { connectService } from '../src/services/connectService';
 import { lightTheme, darkTheme } from '../src/theme/theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-describe('Google Account, Unique Username & Global Theme System', () => {
+describe('Google Account, Profile Setup & Global Theme System', () => {
   beforeEach(async () => {
     await AsyncStorage.clear();
   });
@@ -23,8 +22,8 @@ describe('Google Account, Unique Username & Global Theme System', () => {
       const userAId = 'auth_id_google_a';
       const userBId = 'auth_id_google_b';
 
-      const profileA = { id: userAId, username: 'ahmed_cs', fullName: 'Ahmed Aqeel' };
-      const profileB = { id: userBId, username: 'sara_it', fullName: 'Sara Malik' };
+      const profileA = { id: userAId, fullName: 'Ahmed Aqeel', university: 'University of Science' };
+      const profileB = { id: userBId, fullName: 'Sara Malik', university: 'National University' };
 
       await AsyncStorage.setItem(userProfileKey(userAId), JSON.stringify(profileA));
       await AsyncStorage.setItem(userProfileKey(userBId), JSON.stringify(profileB));
@@ -32,90 +31,40 @@ describe('Google Account, Unique Username & Global Theme System', () => {
       const restoredA = JSON.parse((await AsyncStorage.getItem(userProfileKey(userAId))) || '{}');
       const restoredB = JSON.parse((await AsyncStorage.getItem(userProfileKey(userBId))) || '{}');
 
-      expect(restoredA.username).toBe('ahmed_cs');
-      expect(restoredB.username).toBe('sara_it');
       expect(restoredA.fullName).toBe('Ahmed Aqeel');
       expect(restoredB.fullName).toBe('Sara Malik');
+      expect(restoredA.university).toBe('University of Science');
+      expect(restoredB.university).toBe('National University');
     });
   });
 
-  describe('2. Username Validation & Global Uniqueness', () => {
-    test('accepts valid usernames meeting 3-20 char rules', () => {
-      expect(connectService.validateUsername('ahmed_cs').isValid).toBe(true);
-      expect(connectService.validateUsername('john123').isValid).toBe(true);
-      expect(connectService.validateUsername('@sara_99').isValid).toBe(true);
-      expect(connectService.validateUsername('dev_student').isValid).toBe(true);
-    });
-
-    test('rejects too short, too long, or invalid characters', () => {
-      expect(connectService.validateUsername('ab').isValid).toBe(false);
-      expect(connectService.validateUsername('ab').error).toContain('at least 3 characters');
-
-      expect(connectService.validateUsername('this_is_a_very_long_username_over_limit').isValid).toBe(false);
-      expect(connectService.validateUsername('user name with spaces').isValid).toBe(false);
-      expect(connectService.validateUsername('user!@#$').isValid).toBe(false);
-    });
-
-    test('rejects reserved system usernames', () => {
-      expect(connectService.validateUsername('admin').isValid).toBe(false);
-      expect(connectService.validateUsername('support').isValid).toBe(false);
-      expect(connectService.validateUsername('studentnotes').isValid).toBe(false);
-      expect(connectService.validateUsername('system').isValid).toBe(false);
-    });
-
-    test('normalizes usernames to lowercase and strips leading @', () => {
-      const clean1 = '@AhmedAqeel'.trim().replace(/^@/, '').toLowerCase();
-      const clean2 = 'ahmedaqeel'.trim().replace(/^@/, '').toLowerCase();
-      expect(clean1).toBe('ahmedaqeel');
-      expect(clean1).toBe(clean2);
-    });
-  });
-
-  describe('3. Profile Completion & New vs Existing User Routing Decision', () => {
+  describe('2. Profile Completion & New vs Existing User Routing Decision', () => {
     const isProfileCompleteHelper = (profile: any) => {
       return Boolean(
         profile?.profileCompleted &&
-        profile?.username &&
-        !profile.username.startsWith('student_') &&
-        profile.username.trim().length >= 3 &&
         profile?.fullName &&
         (profile?.university || profile?.institution)
       );
     };
 
-    test('new Google user without custom username is marked incomplete and must complete profile', () => {
+    test('new user without completed profile is routed to ProfileSetup', () => {
       const newGoogleUser = {
         id: 'new_google_user_id',
         fullName: 'New Student',
         email: 'student@gmail.com',
         university: '',
-        username: undefined,
         profileCompleted: false,
       };
 
       expect(isProfileCompleteHelper(newGoogleUser)).toBe(false);
     });
 
-    test('new Google user with auto-generated placeholder is marked incomplete and must choose unique handle', () => {
-      const userWithPlaceholder = {
-        id: 'new_google_user_id',
-        fullName: 'New Student',
-        email: 'student@gmail.com',
-        university: 'University of Engineering',
-        username: 'student_123456',
-        profileCompleted: false,
-      };
-
-      expect(isProfileCompleteHelper(userWithPlaceholder)).toBe(false);
-    });
-
-    test('existing Google user with chosen username and details is complete and routes to MainTabs', () => {
+    test('user with completed profile is routed to MainTabs', () => {
       const existingGoogleUser = {
         id: 'existing_google_user_id',
         fullName: 'Ahmed Aqeel',
         email: 'ahmed@gmail.com',
         university: 'University of Science and Tech',
-        username: 'ahmed_aqeel',
         profileCompleted: true,
       };
 
@@ -123,7 +72,7 @@ describe('Google Account, Unique Username & Global Theme System', () => {
     });
   });
 
-  describe('4. Global Dark / Light / System Theme System', () => {
+  describe('3. Global Dark / Light / System Theme System', () => {
     test('lightTheme has compliant light background and dark contrast text tokens', () => {
       expect(lightTheme.dark).toBe(false);
       expect(lightTheme.colors.background).toBe('#F7F8FA');

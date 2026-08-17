@@ -298,163 +298,7 @@ alter table public.timetable_settings enable row level security;
 create policy "Users manage own timetable settings" on public.timetable_settings
   for all using (auth.uid() = user_id);
 
--- 15. STUDENT CONNECTIONS TABLE
-create table if not exists public.student_connections (
-  id text not null,
-  requester_id uuid references auth.users(id) on delete cascade not null,
-  receiver_id uuid references auth.users(id) on delete cascade not null,
-  status text not null check (status in ('pending', 'accepted', 'declined', 'blocked')),
-  created_at bigint not null,
-  updated_at bigint not null,
-  primary key (id)
-);
-
-alter table public.student_connections enable row level security;
-
-create policy "Users manage involved connections" on public.student_connections
-  for all using (auth.uid() = requester_id or auth.uid() = receiver_id);
-
--- 16. 24-HOUR STUDENT STATUSES TABLE
-create table if not exists public.student_statuses (
-  id text primary key,
-  user_id uuid references auth.users(id) on delete cascade not null,
-  status_type text not null,
-  content text,
-  media_url text,
-  media_type text,
-  caption text,
-  bg_color text,
-  created_at bigint not null,
-  expires_at bigint not null
-);
-
-create table if not exists public.status_views (
-  status_id text references public.student_statuses(id) on delete cascade not null,
-  viewer_id uuid references auth.users(id) on delete cascade not null,
-  viewed_at bigint not null,
-  primary key (status_id, viewer_id)
-);
-
-alter table public.student_statuses enable row level security;
-alter table public.status_views enable row level security;
-
-create policy "Active statuses visible to all authenticated students" on public.student_statuses
-  for select using (auth.role() = 'authenticated' and expires_at > (extract(epoch from now()) * 1000));
-
-create policy "Users manage own status" on public.student_statuses
-  for all using (auth.uid() = user_id);
-
-create policy "Users track status views" on public.status_views
-  for all using (auth.uid() = viewer_id or exists (
-    select 1 from public.student_statuses where id = status_id and user_id = auth.uid()
-  ));
-
--- 17. REPORTS & PRIVACY SETTINGS
-create table if not exists public.student_reports (
-  id text primary key,
-  reporter_id uuid references auth.users(id) on delete cascade not null,
-  reported_user_id uuid references auth.users(id) on delete cascade not null,
-  reason text not null,
-  description text,
-  created_at bigint not null
-);
-
-create table if not exists public.user_privacy_settings (
-  user_id uuid references auth.users(id) on delete cascade primary key,
-  hide_followers_following boolean default false,
-  show_online_status boolean default true,
-  show_last_seen boolean default true,
-  read_receipts boolean default true,
-  status_visibility text default 'connections',
-  updated_at bigint not null
-);
-
-alter table public.user_privacy_settings add column if not exists hide_followers_following boolean default false;
-
-alter table public.student_reports enable row level security;
-alter table public.user_privacy_settings enable row level security;
-
-create policy "Users create reports" on public.student_reports
-  for insert with check (auth.uid() = reporter_id);
-
-create policy "Users manage privacy settings" on public.user_privacy_settings
-  for all using (auth.uid() = user_id);
-
-create policy "Users can read other users privacy settings" on public.user_privacy_settings
-  for select using (auth.role() = 'authenticated');
-
--- STORAGE BUCKETS POLICIES
--- Note: Buckets 'note-files', 'pdf-files', 'avatars', 'documents', 'status-media' in Storage
-
--- Storage policies for note-files bucket
-create policy "Note files isolation" on storage.objects
-  for all using (bucket_id = 'note-files' and auth.uid()::text = (storage.foldername(name))[1]);
-
--- Storage policies for pdf-files bucket
-create policy "PDF files isolation" on storage.objects
-  for all using (bucket_id = 'pdf-files' and auth.uid()::text = (storage.foldername(name))[1]);
-
--- Storage policies for avatars bucket
-create policy "Avatars isolation" on storage.objects
-  for all using (bucket_id = 'avatars' and auth.uid()::text = (storage.foldername(name))[1]);
-
--- Storage policies for documents bucket
-create policy "Documents isolation" on storage.objects
-  for all using (bucket_id = 'documents' and auth.uid()::text = (storage.foldername(name))[1]);
-
--- 18. STUDENT PROFILES (CANONICAL PUBLIC STUDENT CONNECT PROFILES)
-create table if not exists public.student_profiles (
-  id uuid references auth.users(id) on delete cascade primary key,
-  username text unique not null,
-  public_student_id text unique not null,
-  display_name text not null,
-  avatar_url text,
-  bio text,
-  program text,
-  semester text,
-  university text,
-  online_status text default 'offline',
-  last_seen text,
-  followers_count int default 0,
-  following_count int default 0,
-  username_changed_at bigint,
-  created_at bigint not null,
-  updated_at bigint not null
-);
-
-create table if not exists public.username_history (
-  id text primary key,
-  user_id uuid references auth.users(id) on delete cascade not null,
-  username text not null,
-  normalized_username text not null unique,
-  is_current boolean default true,
-  created_at bigint not null,
-  released_at bigint
-);
-
-alter table public.student_profiles enable row level security;
-alter table public.username_history enable row level security;
-
--- Case-insensitive unique indexes to guarantee global username uniqueness
-create unique index if not exists idx_student_profiles_lower_username on public.student_profiles (LOWER(username));
-create unique index if not exists idx_username_history_lower_username on public.username_history (LOWER(username));
-
--- All authenticated students can search and view public student profiles
-create policy "Student profiles visible to authenticated users" on public.student_profiles
-  for select using (auth.role() = 'authenticated');
-
--- Students can only insert and update their own canonical profile
-create policy "Users manage own student profile" on public.student_profiles
-  for all using (auth.uid() = id);
-
--- Username history visible to authenticated users for uniqueness validation
-create policy "Username history visible to authenticated users" on public.username_history
-  for select using (auth.role() = 'authenticated');
-
-create policy "Users insert username history" on public.username_history
-  for insert with check (auth.uid() = user_id);
-
--- 21. SAVED LINKS TABLE (Account-Specific Web Resources)
+-- 15. SAVED LINKS TABLE (Account-Specific Web Resources)
 create table if not exists public.saved_links (
   id text not null,
   user_id uuid references auth.users(id) on delete cascade not null,
@@ -485,3 +329,23 @@ create policy "Users manage own saved links" on public.saved_links
 
 create index if not exists idx_saved_links_user_id on public.saved_links(user_id);
 create index if not exists idx_saved_links_cleaned_url on public.saved_links(cleaned_url);
+
+-- STORAGE BUCKETS POLICIES
+-- Note: Buckets 'note-files', 'pdf-files', 'avatars', 'documents' in Storage
+
+-- Storage policies for note-files bucket
+create policy "Note files isolation" on storage.objects
+  for all using (bucket_id = 'note-files' and auth.uid()::text = (storage.foldername(name))[1]);
+
+-- Storage policies for pdf-files bucket
+create policy "PDF files isolation" on storage.objects
+  for all using (bucket_id = 'pdf-files' and auth.uid()::text = (storage.foldername(name))[1]);
+
+-- Storage policies for avatars bucket
+create policy "Avatars isolation" on storage.objects
+  for all using (bucket_id = 'avatars' and auth.uid()::text = (storage.foldername(name))[1]);
+
+-- Storage policies for documents bucket
+create policy "Documents isolation" on storage.objects
+  for all using (bucket_id = 'documents' and auth.uid()::text = (storage.foldername(name))[1]);
+

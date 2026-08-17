@@ -4,8 +4,6 @@ import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../services/supabase';
 import { syncService } from '../services/syncService';
 import { StudentProfile, StudentStatusType } from '../types/profile';
-import { connectService } from '../services/connectService';
-import { presenceService } from '../services/presenceService';
 import { Platform } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
@@ -35,8 +33,8 @@ export interface AuthContextType {
   registerWithEmail: (
     email: string,
     pass: string,
-    profileData?: Partial<UserProfile> & { username?: string }
-  ) => Promise<{ success: boolean; error?: string; createdProfile?: any }>;
+    profileData?: Partial<UserProfile>
+  ) => Promise<{ success: boolean; error?: string }>;
   loginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
   sendPasswordResetOtp: (email: string) => Promise<{ success: boolean; error?: string }>;
   verifyOtpForPasswordReset: (email: string, otp: string) => Promise<{ success: boolean; error?: string }>;
@@ -51,7 +49,7 @@ export interface AuthContextType {
 const HAS_CHOSEN_MODE_KEY = 'studentnotes_has_chosen_mode';
 const LOCAL_PROFILE_KEY = 'studentnotes_local_profile';
 export const TERMS_ACCEPTED_KEY = 'studentnotes_terms_accepted_v1';
-// Per-user scoped profile key — ensures Gmail A and Gmail B never share a stored profile
+// Per-user scoped profile key — ensures Account A and Account B never share local profile data
 const userProfileKey = (userId: string) => `studentnotes_profile_${userId}`;
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
@@ -68,12 +66,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [syncProgress, setSyncProgress] = useState({ status: '', current: 0, total: 0 });
   const [pendingPasswordReset, setPendingPasswordReset] = useState(false);
 
-  // Calculate if profile is completed: MUST have a valid unique username, full name, and institution
+  // Calculate if profile is completed: has full name and institution/university
   const isProfileComplete = Boolean(
     profile?.profileCompleted &&
-    profile?.username &&
-    !profile.username.startsWith('student_') &&
-    profile.username.trim().length >= 3 &&
     profile?.fullName &&
     (profile?.university || profile?.institution)
   );
@@ -116,7 +111,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     loadAuth();
 
-    // Safe, idempotent handler for incoming OAuth / auth redirect URLs
+    // Deep link OAuth handler
     const handleDeepLink = async (url: string | null) => {
       if (!url) return;
       try {
@@ -148,7 +143,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const params = new URLSearchParams(hashOrQuery);
           const accessToken = params.get('access_token');
           const refreshToken = params.get('refresh_token');
-          const typeParam = params.get('type');
           if (accessToken && refreshToken) {
             try {
               const { data: setSessData, error: setSessErr } = await supabase.auth.setSession({
@@ -161,7 +155,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setIsOffline(false);
                 setHasChosenMode(true);
                 await AsyncStorage.setItem(HAS_CHOSEN_MODE_KEY, 'true');
-                if (isRecovery || typeParam === 'recovery') {
+                if (isRecovery) {
                   setPendingPasswordReset(true);
                 } else {
                   await loadCloudProfile(setSessData.user.id, setSessData.user.email || '');
@@ -172,7 +166,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
 
-        // Fallback: check active Supabase session
         const { data: sessData } = await supabase.auth.getSession();
         if (sessData.session && sessData.session.user) {
           setSession(sessData.session);
@@ -241,7 +234,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           semester: '1st Semester',
           gender: 'male',
           avatarPreset: 'male_student',
-          ringColor: '#6366F1',
           profileCompleted: false,
         });
       }
@@ -255,26 +247,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const googleName = meta.full_name || meta.name || '';
       const googleAvatar = meta.avatar_url || meta.picture || undefined;
 
-      // Load user-scoped local cache (each Google account has its own key)
+      // Load user-scoped local cache
       const scopedKey = userProfileKey(userId);
       const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
       const local = await AsyncStorage.getItem(scopedKey);
       const parsed = local ? JSON.parse(local) : {};
-
-      // Initialize / restore student connect identity (idempotent — will load existing username from cloud)
-      let connectUsername: string | undefined;
-      try {
-        const connectProf = await connectService.initializeStudentAccount(userId, {
-          fullName: parsed.fullName || googleName || userEmail.split('@')[0],
-          email: userEmail,
-          avatarUrl: parsed.avatarUrl || googleAvatar,
-          university: parsed.university,
-          program: parsed.program,
-          semester: parsed.semester,
-        });
-        connectUsername = connectProf?.username;
-        await presenceService.startPresence(userId);
-      } catch {}
 
       if (data) {
         const univ = data.university || data.institution || '';
@@ -283,7 +260,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const builtProfile: UserProfile = {
           id: data.id,
-          username: connectUsername || parsed.username,
           fullName: nameToUse,
           email: data.email || userEmail,
           department: data.department || '',
@@ -298,26 +274,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           gender: data.gender || 'male',
           avatarPreset: data.avatar_preset || 'male_student',
           avatarUrl: avatarToUse,
-          ringColor: data.ring_color || parsed?.ringColor || '#6366F1',
-          profileCompleted: Boolean(
-            data.profile_completed &&
-            (connectUsername || parsed.username) &&
-            !(connectUsername || parsed.username)?.startsWith('student_')
-          ),
+          profileCompleted: Boolean(data.profile_completed || (nameToUse && univ)),
         };
         setProfile(builtProfile);
-        // Persist to user-scoped key
         await AsyncStorage.setItem(scopedKey, JSON.stringify(builtProfile));
       } else {
         // Fallback profile for new signups
         const univ = parsed.university || parsed.institution || '';
         const nameToUse = googleName || parsed.fullName || userEmail.split('@')[0];
         const avatarToUse = googleAvatar || parsed.avatarUrl || undefined;
-        const validUser = (connectUsername || parsed.username) && !(connectUsername || parsed.username)?.startsWith('student_');
 
         const newProfile: UserProfile = {
           id: userId,
-          username: validUser ? (connectUsername || parsed.username) : undefined,
           fullName: nameToUse,
           email: userEmail,
           department: parsed.department || '',
@@ -332,28 +300,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           gender: parsed.gender || 'male',
           avatarPreset: parsed.avatarPreset || 'male_student',
           avatarUrl: avatarToUse,
-          ringColor: parsed.ringColor || '#6366F1',
-          profileCompleted: Boolean(parsed.profileCompleted && validUser && (nameToUse && univ)),
+          profileCompleted: Boolean(parsed.profileCompleted || (nameToUse && univ)),
         };
 
         setProfile(newProfile);
         await AsyncStorage.setItem(scopedKey, JSON.stringify(newProfile));
 
-        // Auto-persist new Google profile to Supabase
+        // Auto-persist profile to Supabase
         try {
           await supabase.from('profiles').upsert({
             id: userId,
             full_name: nameToUse,
             email: userEmail,
             avatar_url: avatarToUse || null,
-            ring_color: '#6366F1',
             student_status: 'Student',
             profile_completed: Boolean(nameToUse && univ),
           });
         } catch {}
       }
 
-      // Download and restore all cloud data (notes, PDFs, subjects, etc.) for this user
+      // Download and restore cloud data for this user
       try {
         await syncService.downloadCloudDataToLocal(userId);
       } catch (e) {
@@ -371,7 +337,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         semester: '',
         gender: 'male',
         avatarPreset: 'male_student',
-        ringColor: '#6366F1',
         profileCompleted: false,
       });
     }
@@ -425,28 +390,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const registerWithEmail = async (
     email: string,
     pass: string,
-    profileData?: Partial<UserProfile> & { username?: string }
+    profileData?: Partial<UserProfile>
   ) => {
     try {
-      // 1. Enforce internet requirement for account creation
-      if (profileData?.username) {
-        const avail = await connectService.checkUsernameAvailability(profileData.username);
-        if (!avail.available) {
-          return {
-            success: false,
-            error: avail.error || 'This username is already taken. Please choose another username.',
-          };
-        }
-      }
-
-      // 2. Register Supabase Auth account
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password: pass,
         options: {
           data: {
             full_name: profileData?.fullName || '',
-            username: profileData?.username || '',
           },
         },
       });
@@ -509,22 +461,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           });
         } catch {}
 
-        // Automatically initialize student connect identity (unique username + Student ID)
-        let connectProf: any = null;
-        try {
-          connectProf = await connectService.initializeStudentAccount(data.user.id, {
-            username: profileData?.username,
-            fullName: newProf.fullName,
-            email: newProf.email,
-            university: newProf.university,
-            program: newProf.program,
-            semester: newProf.semester,
-          });
-          await presenceService.startPresence(data.user.id);
-        } catch {}
-
         setProfile(newProf);
-        return { success: true, createdProfile: connectProf };
+        return { success: true };
       }
 
       return { success: true };
@@ -546,7 +484,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ? AuthSession.makeRedirectUri({ preferLocalhost: false })
         : AuthSession.makeRedirectUri({ scheme: 'studentnotes', preferLocalhost: false });
 
-      console.log('🔗 Initiating Google Sign-In with Redirect URI:', redirectUrl);
+
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -568,8 +506,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       }
 
-      console.log('🌐 Opening Web Browser OAuth Session...');
-
       const safeDismissBrowser = () => {
         try {
           if (Platform.OS === 'ios') {
@@ -578,7 +514,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch {}
       };
 
-      // Start active session polling while user is in browser
       let sessionDetected = false;
       const pollInterval = setInterval(async () => {
         try {
@@ -597,7 +532,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch {}
       }, 800);
 
-      // Race openAuthSessionAsync with a 45s timeout guard to prevent infinite loading
       const authPromise = WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
       const timeoutPromise = new Promise<{ type: 'timeout' }>((resolve) =>
         setTimeout(() => resolve({ type: 'timeout' }), 45000)
@@ -618,12 +552,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       }
 
-      console.log('📥 Web Browser Result:', result.type);
-
       if (result.type === 'success' && result.url) {
         const url = result.url;
 
-        // 1. Handle PKCE authorization code exchange
         if (url.includes('code=')) {
           const codeMatch = url.match(/code=([^&#]+)/);
           const code = codeMatch ? decodeURIComponent(codeMatch[1]) : null;
@@ -643,7 +574,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
 
-        // 2. Handle token parameter in URL hash or query
         if (url.includes('access_token')) {
           const hashOrQuery = url.includes('#') ? url.split('#')[1] : url.split('?')[1];
           const params = new URLSearchParams(hashOrQuery);
@@ -669,7 +599,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // 3. Immediate session check (in case deep link listener already exchanged session!)
       const { data: sessData } = await supabase.auth.getSession();
       if (sessData.session && sessData.session.user) {
         setSession(sessData.session);
@@ -766,7 +695,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       setPendingPasswordReset(false);
 
-      // Cleanly sign out session so user can log in with new password
       try {
         await supabase.auth.signOut();
       } catch {}
@@ -781,11 +709,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     try {
-      await presenceService.stopPresence();
-    } catch {}
-    // Sign out from Supabase — this clears the auth session
-    // but does NOT delete cloud data or user-scoped local profile cache
-    try {
       await supabase.auth.signOut();
     } catch {}
     try {
@@ -798,7 +721,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsOffline(true);
     setHasChosenMode(true);
     await AsyncStorage.setItem(HAS_CHOSEN_MODE_KEY, 'true');
-    // Show a clean offline profile (not the user-scoped one — that stays preserved for next login)
     setProfile({
       fullName: 'Student User',
       email: 'student@studentnotes.local',
@@ -809,7 +731,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       semester: '',
       gender: 'male',
       avatarPreset: 'male_student',
-      ringColor: '#6366F1',
       profileCompleted: false,
     });
   };
@@ -818,7 +739,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const univ = data.university || data.institution || profile?.university || profile?.institution || '';
     const updated: UserProfile = {
       id: profile?.id || user?.id,
-      username: data.username ?? profile?.username,
       fullName: data.fullName ?? profile?.fullName ?? 'Student',
       email: profile?.email || user?.email || 'student@studentnotes.local',
       department: data.department ?? profile?.department ?? '',
@@ -833,34 +753,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       gender: data.gender ?? profile?.gender ?? 'male',
       avatarPreset: data.avatarPreset ?? profile?.avatarPreset ?? 'male_student',
       avatarUrl: data.avatarUrl ?? profile?.avatarUrl,
-      ringColor: data.ringColor ?? profile?.ringColor ?? '#6366F1',
       profileCompleted: data.profileCompleted !== undefined ? data.profileCompleted : true,
     };
 
     setProfile(updated);
-    // Save to legacy key AND user-scoped key for backward compat
     await AsyncStorage.setItem(LOCAL_PROFILE_KEY, JSON.stringify(updated));
     if (user?.id) {
       await AsyncStorage.setItem(userProfileKey(user.id), JSON.stringify(updated));
     }
 
-    const effectiveUserId = user?.id || 'guest_user';
-
-    // 1. Sync canonical student_profiles in local SQLite & Supabase
-    try {
-      await connectService.saveProfile(effectiveUserId, {
-        displayName: updated.fullName,
-        avatarUrl: updated.avatarUrl,
-        bio: updated.bio,
-        program: updated.program,
-        semester: updated.semester,
-        university: updated.university,
-      });
-    } catch (e) {
-      console.warn('Could not sync to student_profiles:', e);
-    }
-
-    // 2. Sync to profiles table in Supabase
     if (user?.id) {
       try {
         await supabase.from('profiles').upsert({
@@ -880,7 +781,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           gender: updated.gender,
           avatar_preset: updated.avatarPreset,
           avatar_url: updated.avatarUrl || null,
-          ring_color: updated.ringColor || '#6366F1',
           updated_at: new Date().toISOString(),
         });
       } catch (e) {

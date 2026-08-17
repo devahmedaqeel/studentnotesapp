@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS pdfs (
   title TEXT NOT NULL,
   filePath TEXT NOT NULL,
   pageCount INTEGER DEFAULT 0,
+  fileSize INTEGER DEFAULT 0,
   favorite INTEGER DEFAULT 0,
   createdAt INTEGER NOT NULL,
   updatedAt INTEGER NOT NULL,
@@ -169,90 +170,6 @@ CREATE TABLE IF NOT EXISTS timetable_settings (
   updatedAt INTEGER NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS student_profiles (
-  id TEXT PRIMARY KEY,
-  username TEXT UNIQUE NOT NULL,
-  publicStudentId TEXT UNIQUE NOT NULL,
-  displayName TEXT NOT NULL,
-  avatarUrl TEXT,
-  bio TEXT,
-  program TEXT,
-  semester TEXT,
-  university TEXT,
-  onlineStatus TEXT DEFAULT 'offline',
-  lastSeen TEXT,
-  followersCount INTEGER DEFAULT 0,
-  followingCount INTEGER DEFAULT 0,
-  usernameChangedAt INTEGER,
-  createdAt INTEGER NOT NULL,
-  updatedAt INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS username_history (
-  id TEXT PRIMARY KEY,
-  userId TEXT NOT NULL,
-  username TEXT NOT NULL,
-  normalizedUsername TEXT NOT NULL UNIQUE,
-  createdAt INTEGER NOT NULL,
-  releasedAt INTEGER,
-  isCurrent INTEGER NOT NULL DEFAULT 1
-);
-
-CREATE TABLE IF NOT EXISTS student_connections (
-  id TEXT PRIMARY KEY,
-  requesterId TEXT NOT NULL,
-  receiverId TEXT NOT NULL,
-  status TEXT NOT NULL,
-  createdAt INTEGER NOT NULL,
-  updatedAt INTEGER NOT NULL,
-  FOREIGN KEY (requesterId) REFERENCES student_profiles(id) ON DELETE CASCADE,
-  FOREIGN KEY (receiverId) REFERENCES student_profiles(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS student_blocked (
-  id TEXT PRIMARY KEY,
-  userId TEXT NOT NULL,
-  blockedUserId TEXT NOT NULL,
-  createdAt INTEGER NOT NULL,
-  FOREIGN KEY (userId) REFERENCES student_profiles(id) ON DELETE CASCADE,
-  FOREIGN KEY (blockedUserId) REFERENCES student_profiles(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS student_statuses (
-  id TEXT PRIMARY KEY,
-  userId TEXT NOT NULL,
-  username TEXT NOT NULL,
-  displayName TEXT NOT NULL,
-  avatarUrl TEXT,
-  statusType TEXT NOT NULL,
-  content TEXT,
-  mediaUrl TEXT,
-  mediaType TEXT,
-  caption TEXT,
-  bgColor TEXT,
-  createdAt INTEGER NOT NULL,
-  expiresAt INTEGER NOT NULL,
-  viewersCount INTEGER DEFAULT 0
-);
-
-CREATE TABLE IF NOT EXISTS status_views (
-  id TEXT PRIMARY KEY,
-  statusId TEXT NOT NULL,
-  viewerId TEXT NOT NULL,
-  viewedAt INTEGER NOT NULL,
-  FOREIGN KEY (statusId) REFERENCES student_statuses(id) ON DELETE CASCADE,
-  FOREIGN KEY (viewerId) REFERENCES student_profiles(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS user_privacy_settings (
-  userId TEXT PRIMARY KEY,
-  hideFollowersFollowing INTEGER DEFAULT 0,
-  showOnlineStatus INTEGER DEFAULT 1,
-  showLastSeen INTEGER DEFAULT 1,
-  readReceipts INTEGER DEFAULT 1,
-  updatedAt INTEGER NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS saved_links (
   id TEXT PRIMARY KEY,
   userId TEXT,
@@ -276,7 +193,6 @@ CREATE TABLE IF NOT EXISTS saved_links (
   FOREIGN KEY (subjectId) REFERENCES subjects(id) ON DELETE SET NULL
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_status_views_unique ON status_views(statusId, viewerId);
 CREATE INDEX IF NOT EXISTS idx_subjects_name ON subjects(name);
 CREATE INDEX IF NOT EXISTS idx_folders_subjectId ON folders(subjectId);
 CREATE INDEX IF NOT EXISTS idx_notes_subjectId ON notes(subjectId);
@@ -298,10 +214,6 @@ CREATE INDEX IF NOT EXISTS idx_diary_attachments_eventId ON diary_attachments(ev
 CREATE INDEX IF NOT EXISTS idx_timetable_dayOfWeek ON timetable_classes(dayOfWeek);
 CREATE INDEX IF NOT EXISTS idx_timetable_startTime ON timetable_classes(startTime);
 CREATE INDEX IF NOT EXISTS idx_timetable_subjectId ON timetable_classes(subjectId);
-CREATE INDEX IF NOT EXISTS idx_student_profiles_username ON student_profiles(username);
-CREATE INDEX IF NOT EXISTS idx_student_profiles_studentId ON student_profiles(publicStudentId);
-CREATE INDEX IF NOT EXISTS idx_student_connections_req_rec ON student_connections(requesterId, receiverId);
-CREATE INDEX IF NOT EXISTS idx_student_statuses_expiry ON student_statuses(expiresAt);
 CREATE INDEX IF NOT EXISTS idx_saved_links_cleanedUrl ON saved_links(cleanedUrl);
 CREATE INDEX IF NOT EXISTS idx_saved_links_resourceType ON saved_links(resourceType);
 CREATE INDEX IF NOT EXISTS idx_saved_links_subjectId ON saved_links(subjectId);

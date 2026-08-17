@@ -3,7 +3,6 @@ import { StudentProfile, ProfileStats } from '../types/profile';
 import { subjectRepository } from '../database/repositories/subjectRepository';
 import { noteRepository } from '../database/repositories/noteRepository';
 import { pdfRepository } from '../database/repositories/pdfRepository';
-import { connectService } from './connectService';
 import * as FileSystem from 'expo-file-system/legacy';
 import { base64ToArrayBuffer } from '../utils/binary';
 
@@ -35,7 +34,6 @@ export const profileService = {
         gender: data.gender || 'male',
         avatarPreset: data.avatar_preset || 'male_student',
         avatarUrl: data.avatar_url || undefined,
-        ringColor: data.ring_color || undefined,
         createdAt: data.created_at,
         updatedAt: data.updated_at,
       };
@@ -64,21 +62,8 @@ export const profileService = {
         gender: profile.gender || 'male',
         avatar_preset: profile.avatarPreset || 'male_student',
         avatar_url: profile.avatarUrl || null,
-        ring_color: profile.ringColor || null,
         updated_at: new Date().toISOString(),
       });
-
-      // Synchronize canonical student_profiles
-      try {
-        await connectService.saveProfile(userId, {
-          displayName: profile.fullName || undefined,
-          avatarUrl: profile.avatarUrl || undefined,
-          bio: profile.bio || undefined,
-          program: profile.program || undefined,
-          semester: profile.semester || undefined,
-          university: universityVal || undefined,
-        });
-      } catch {}
 
       return !error;
     } catch {

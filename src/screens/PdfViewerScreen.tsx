@@ -456,11 +456,21 @@ export const PdfViewerScreen: React.FC<Props> = ({ navigation, route }) => {
         onBack={() => navigation.goBack()}
         rightAction={
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <TouchableOpacity onPress={handleGoToSubject} style={styles.headerBtn}>
+            <TouchableOpacity
+              onPress={handleGoToSubject}
+              style={styles.headerBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Go to subject folder"
+            >
               <Ionicons name="folder-open-outline" size={22} color={theme.colors.primary} />
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={handleToggleFavorite} style={styles.headerBtn}>
+            <TouchableOpacity
+              onPress={handleToggleFavorite}
+              style={styles.headerBtn}
+              accessibilityRole="button"
+              accessibilityLabel={pdf.favorite ? 'Remove from favorites' : 'Add to favorites'}
+            >
               <Ionicons
                 name={pdf.favorite ? 'star' : 'star-outline'}
                 size={22}
@@ -468,7 +478,12 @@ export const PdfViewerScreen: React.FC<Props> = ({ navigation, route }) => {
               />
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => setShowOptions(true)} style={styles.headerBtn}>
+            <TouchableOpacity
+              onPress={() => setShowOptions(true)}
+              style={styles.headerBtn}
+              accessibilityRole="button"
+              accessibilityLabel="More PDF options"
+            >
               <Ionicons name="ellipsis-vertical" size={22} color={theme.colors.text} />
             </TouchableOpacity>
           </View>
@@ -480,6 +495,8 @@ export const PdfViewerScreen: React.FC<Props> = ({ navigation, route }) => {
         activeOpacity={0.8}
         onPress={handleGoToSubject}
         style={[styles.breadcrumbBar, { backgroundColor: theme.colors.card, borderBottomColor: theme.colors.border }]}
+        accessibilityRole="button"
+        accessibilityLabel={`Back to ${pdf.subjectName || 'Subject'} Folder`}
       >
         <Ionicons name="arrow-back-outline" size={16} color={theme.colors.primary} />
         <Text style={[styles.breadcrumbText, { color: theme.colors.primary }]}>
@@ -511,6 +528,8 @@ export const PdfViewerScreen: React.FC<Props> = ({ navigation, route }) => {
             onPress={() => handleScrollToPage(currentPage - 1)}
             disabled={currentPage <= 1}
             style={[styles.navArrowBtn, currentPage <= 1 && { opacity: 0.3 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Previous page"
           >
             <Ionicons name="chevron-back" size={18} color="#FFFFFF" />
           </TouchableOpacity>
@@ -523,6 +542,8 @@ export const PdfViewerScreen: React.FC<Props> = ({ navigation, route }) => {
             onPress={() => handleScrollToPage(currentPage + 1)}
             disabled={currentPage >= totalPages}
             style={[styles.navArrowBtn, currentPage >= totalPages && { opacity: 0.3 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Next page"
           >
             <Ionicons name="chevron-forward" size={18} color="#FFFFFF" />
           </TouchableOpacity>

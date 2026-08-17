@@ -23,6 +23,7 @@ export const pdfRepository = {
       title: r.title,
       filePath: r.filePath,
       pageCount: r.pageCount || 0,
+      fileSize: r.fileSize || 0,
       favorite: Boolean(r.favorite),
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
@@ -65,6 +66,7 @@ export const pdfRepository = {
       title: r.title,
       filePath: r.filePath,
       pageCount: r.pageCount || 0,
+      fileSize: r.fileSize || 0,
       favorite: Boolean(r.favorite),
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
@@ -98,6 +100,7 @@ export const pdfRepository = {
       title: r.title,
       filePath: r.filePath,
       pageCount: r.pageCount || 0,
+      fileSize: r.fileSize || 0,
       favorite: Boolean(r.favorite),
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
@@ -127,6 +130,7 @@ export const pdfRepository = {
       title: r.title,
       filePath: r.filePath,
       pageCount: r.pageCount || 0,
+      fileSize: r.fileSize || 0,
       favorite: true,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
@@ -149,16 +153,12 @@ export const pdfRepository = {
     const now = Date.now();
 
     await db.runAsync(
-      `INSERT INTO pdfs (id, subjectId, folderId, title, filePath, pageCount, favorite, createdAt, updatedAt)
-       VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`,
-      sanitizeParams([id, pdf.subjectId, pdf.folderId || null, pdf.title || 'Untitled PDF', pdf.filePath, pdf.pageCount || 1, now, now])
+      `INSERT INTO pdfs (id, subjectId, folderId, title, filePath, pageCount, fileSize, favorite, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+      sanitizeParams([id, pdf.subjectId, pdf.folderId || null, pdf.title || 'Untitled PDF', pdf.filePath, pdf.pageCount || 1, pdf.fileSize || 0, now, now])
     );
 
-    const created = await this.getById(id);
-    if (created && pdf.fileSize) {
-      created.fileSize = pdf.fileSize;
-    }
-    return created!;
+    return (await this.getById(id))!;
   },
 
   async update(id: string, input: UpdatePdfInput): Promise<PdfDocument | null> {

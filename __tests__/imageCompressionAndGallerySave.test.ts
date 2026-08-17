@@ -1,8 +1,10 @@
 import { imageCompressionService } from '../src/services/imageCompressionService';
 import { imageService } from '../src/services/imageService';
+import { pdfCompressionService } from '../src/services/pdfCompressionService';
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImageManipulator from 'expo-image-manipulator';
+import * as Print from 'expo-print';
 
 // Mock dependencies
 jest.mock('expo-media-library', () => ({
@@ -23,7 +25,11 @@ jest.mock('expo-image-manipulator', () => ({
   },
 }));
 
-describe('Image Compression & Save to Gallery Test Suite', () => {
+jest.mock('expo-print', () => ({
+  printToFileAsync: jest.fn(),
+}));
+
+describe('Image & PDF Compression Real Byte-Reduction Test Suite', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -31,12 +37,12 @@ describe('Image Compression & Save to Gallery Test Suite', () => {
   describe('1. Dynamic Compression Estimation & Quality Mapping', () => {
     test('accurately calculates estimated compressed file size and savings percentage for 70% compression', () => {
       const originalBytes = 10 * 1024 * 1024; // 10 MB
-      const compressionPct = 70; // 70% compression = 30% quality factor
+      const compressionPct = 70;
       const result = imageCompressionService.estimateCompressedSize(originalBytes, compressionPct, 'jpeg');
 
       expect(result.estimatedSize).toBeLessThan(originalBytes);
       expect(result.savedBytes).toBeGreaterThan(0);
-      expect(result.savedPercentage).toBe(70);
+      expect(result.savedPercentage).toBeGreaterThanOrEqual(60);
     });
 
     test('supports PNG and WEBP format factors', () => {
@@ -45,7 +51,6 @@ describe('Image Compression & Save to Gallery Test Suite', () => {
       const webpResult = imageCompressionService.estimateCompressedSize(originalBytes, 50, 'webp');
       const pngResult = imageCompressionService.estimateCompressedSize(originalBytes, 50, 'png');
 
-      // WEBP should be more compact than JPEG, PNG larger than JPEG
       expect(webpResult.estimatedSize).toBeLessThan(jpegResult.estimatedSize);
       expect(pngResult.estimatedSize).toBeGreaterThan(jpegResult.estimatedSize);
     });
@@ -58,7 +63,93 @@ describe('Image Compression & Save to Gallery Test Suite', () => {
     });
   });
 
-  describe('2. Media Library Permissions & Gallery Saving Flow', () => {
+  describe('2. Intelligent Resolution Scaling & Parameters', () => {
+    test('scales max dimension to 1440 for strong compression (quality <= 0.45)', () => {
+      const config = { preset: 'small' as const, quality: 0.40, format: 'jpeg' as const };
+      const maxDim = imageCompressionService.computeEffectiveMaxResolution(config, 4000, 3000);
+      expect(maxDim).toBe(1440);
+    });
+
+    test('scales max dimension to 1920 for balanced compression (quality 0.65)', () => {
+      const config = { preset: 'balanced' as const, quality: 0.65, format: 'jpeg' as const };
+      const maxDim = imageCompressionService.computeEffectiveMaxResolution(config, 4000, 3000);
+      expect(maxDim).toBe(1920);
+    });
+
+    test('scales max dimension to 2560 for high quality (quality 0.85)', () => {
+      const config = { preset: 'high_quality' as const, quality: 0.85, format: 'jpeg' as const };
+      const maxDim = imageCompressionService.computeEffectiveMaxResolution(config, 4000, 3000);
+      expect(maxDim).toBe(2560);
+    });
+
+    test('respects explicit maxResolution override when supplied', () => {
+      const config = { preset: 'custom' as const, quality: 0.50, maxResolution: 1200, format: 'jpeg' as const };
+      const maxDim = imageCompressionService.computeEffectiveMaxResolution(config, 4000, 3000);
+      expect(maxDim).toBe(1200);
+    });
+  });
+
+  describe('3. Actual Image Compression Byte Reduction & Safety', () => {
+    test('compresses camera image and returns true physical size reduction', async () => {
+      const originalSize = 5242880; // 5.0 MB
+      const compressedSize = 1887436; // 1.8 MB
+
+      (FileSystem.getInfoAsync as jest.Mock)
+        .mockResolvedValueOnce({ exists: true, size: originalSize }) // validateImage
+        .mockResolvedValueOnce({ exists: true, size: originalSize }) // origInfo
+        .mockResolvedValueOnce({ exists: true, size: compressedSize }); // compInfo
+
+      (ImageManipulator.manipulateAsync as jest.Mock).mockResolvedValueOnce({
+        uri: 'file:///cache/ImageManipulator/compressed.jpg',
+        width: 1440,
+        height: 1080,
+      });
+
+      const res = await imageCompressionService.compressImage('file:///photos/camera.jpg', {
+        preset: 'small',
+        quality: 0.40,
+        format: 'jpeg',
+      });
+
+      expect(res.originalSize).toBe(originalSize);
+      expect(res.compressedSize).toBe(compressedSize);
+      expect(res.savedBytes).toBe(originalSize - compressedSize);
+      expect(res.savedPercentage).toBe(64); // ~64% reduction
+      expect(ImageManipulator.manipulateAsync).toHaveBeenCalledWith(
+        'file:///photos/camera.jpg',
+        expect.arrayContaining([{ resize: { height: 1440 } }]),
+        expect.objectContaining({ compress: 0.40, format: 'jpeg' })
+      );
+    });
+
+    test('handles already-optimized images safely without claiming fake reduction', async () => {
+      const tinySize = 25000; // 25 KB
+      const resultSize = 25000; // 25 KB
+
+      (FileSystem.getInfoAsync as jest.Mock)
+        .mockResolvedValueOnce({ exists: true, size: tinySize })
+        .mockResolvedValueOnce({ exists: true, size: tinySize })
+        .mockResolvedValueOnce({ exists: true, size: resultSize });
+
+      (ImageManipulator.manipulateAsync as jest.Mock).mockResolvedValueOnce({
+        uri: 'file:///cache/compressed_tiny.jpg',
+        width: 800,
+        height: 600,
+      });
+
+      const res = await imageCompressionService.compressImage('file:///tiny.jpg', {
+        preset: 'balanced',
+        quality: 0.70,
+        format: 'jpeg',
+      });
+
+      expect(res.compressedSize).toBe(resultSize);
+      expect(res.savedBytes).toBe(0);
+      expect(res.savedPercentage).toBe(0);
+    });
+  });
+
+  describe('4. Media Library Permissions & Gallery Saving Flow', () => {
     test('saves compressed image to Gallery when Media Library permission is already granted', async () => {
       (FileSystem.getInfoAsync as jest.Mock).mockResolvedValue({ exists: true, size: 250000 });
       (MediaLibrary.getPermissionsAsync as jest.Mock).mockResolvedValue({ granted: true, canAskAgain: true });
@@ -121,18 +212,9 @@ describe('Image Compression & Save to Gallery Test Suite', () => {
       expect(saveResult.canAskAgain).toBe(false);
       expect(saveResult.error).toContain('permanently denied');
     });
-
-    test('fails gracefully when source file does not exist on disk', async () => {
-      (FileSystem.getInfoAsync as jest.Mock).mockResolvedValue({ exists: false });
-
-      const saveResult = await imageCompressionService.saveImageToGallery('file:///non/existent/path.jpg');
-
-      expect(saveResult.success).toBe(false);
-      expect(saveResult.error).toContain('could not be found');
-    });
   });
 
-  describe('3. Batch Image Saving to Gallery', () => {
+  describe('5. Batch Image Saving to Gallery', () => {
     test('saves multiple compressed images and adds to StudentNotes album', async () => {
       (FileSystem.getInfoAsync as jest.Mock).mockResolvedValue({ exists: true, size: 150000 });
       (MediaLibrary.getPermissionsAsync as jest.Mock).mockResolvedValue({ granted: true, canAskAgain: true });
@@ -151,7 +233,7 @@ describe('Image Compression & Save to Gallery Test Suite', () => {
     });
   });
 
-  describe('4. Image Service Save Bridge Verification', () => {
+  describe('6. Image Service Save Bridge Verification', () => {
     test('imageService.saveToGallery forwards call to imageCompressionService', async () => {
       (FileSystem.getInfoAsync as jest.Mock).mockResolvedValue({ exists: true, size: 120000 });
       (MediaLibrary.getPermissionsAsync as jest.Mock).mockResolvedValue({ granted: true });

@@ -39,13 +39,10 @@ export const PrivacyPolicyScreen: React.FC<Props> = ({ navigation }) => {
             Depending on how you use Student Notes, we collect only necessary data:
           </Text>
           <Text style={[styles.bulletText, { color: theme.colors.textSecondary }]}>
-            • <Text style={{ fontWeight: '700' }}>Account & Profile Data:</Text> When you register, we collect your email address, student name, university/program (optional), avatar selection, and public Student ID.
+            • <Text style={{ fontWeight: '700' }}>Account & Profile Data:</Text> When you register, we collect your email address, student name, university/institution, and optional academic degree details.
           </Text>
           <Text style={[styles.bulletText, { color: theme.colors.textSecondary }]}>
             • <Text style={{ fontWeight: '700' }}>Academic Content:</Text> Subject names, note pages, scanned documents, compressed PDFs, saved study links, tags, timetable classes, and diary events.
-          </Text>
-          <Text style={[styles.bulletText, { color: theme.colors.textSecondary }]}>
-            • <Text style={{ fontWeight: '700' }}>Direct Messaging & Social:</Text> Direct messages in Student Connect utilize End-to-End Encryption (E2EE) with AES-256-GCM / HMAC keys derived locally on your device.
           </Text>
 
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>3. Local-First Storage & Offline Operation</Text>
@@ -58,9 +55,9 @@ export const PrivacyPolicyScreen: React.FC<Props> = ({ navigation }) => {
             When you sign in, your data is securely synchronized with our backend via TLS 1.3 encrypted connections. Database access is strictly governed by PostgreSQL Row-Level Security (RLS), ensuring no other user can access your private notes, documents, or saved links.
           </Text>
 
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>5. Privacy Controls & Blocking</Text>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>5. Data Control & Ownership</Text>
           <Text style={[styles.bodyText, { color: theme.colors.textSecondary }]}>
-            You have full control over your social visibility. Through Settings and Profile, you can hide followers/following, manage active online status, and block any contact immediately. Blocked users cannot view your status or send messages.
+            You have full control over your academic data. You can create, edit, backup, export, and delete any note, PDF, timetable entry, or bookmark at any time.
           </Text>
 
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>6. Data Retention & Account Deletion</Text>

@@ -17,13 +17,6 @@ export const LAST_SYNCED_KEY = 'studentnotes_last_synced_at';
 export const LOCAL_DATA_OWNER_KEY = 'studentnotes_local_data_owner';
 
 const USER_DATA_TABLES_DELETE_ORDER = [
-  'status_views',
-  'student_statuses',
-  'student_blocked',
-  'student_connections',
-  'username_history',
-  'student_profiles',
-  'user_privacy_settings',
   'saved_links',
   'diary_attachments',
   'diary_events',

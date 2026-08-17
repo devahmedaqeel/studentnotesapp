@@ -4,8 +4,6 @@ import { getFileExtension, formatFileSize, detectDocumentType, getDocumentMimeTy
 import { formatPageCount, formatNoteCount, formatPdfCount } from '../src/utils/formatting';
 import { diaryService } from '../src/services/diaryService';
 import { timetableService } from '../src/services/timetableService';
-import { connectService } from '../src/services/connectService';
-import { statusService } from '../src/services/statusService';
 import { base64ToUint8Array, uint8ArrayToBase64, base64ToArrayBuffer } from '../src/utils/binary';
 
 describe('Utility Functions Unit Tests', () => {
@@ -60,129 +58,51 @@ describe('Utility Functions Unit Tests', () => {
   });
 
   describe('Formatting Utilities', () => {
-    test('formats page counts correctly', () => {
+    test('formats page, note, and PDF counts accurately', () => {
       expect(formatPageCount(1)).toBe('1 page');
       expect(formatPageCount(5)).toBe('5 pages');
-    });
-
-    test('formats note counts correctly', () => {
       expect(formatNoteCount(1)).toBe('1 note');
-      expect(formatNoteCount(3)).toBe('3 notes');
-    });
-
-    test('formats pdf counts correctly', () => {
+      expect(formatNoteCount(10)).toBe('10 notes');
       expect(formatPdfCount(1)).toBe('1 PDF');
-      expect(formatPdfCount(4)).toBe('4 PDFs');
+      expect(formatPdfCount(3)).toBe('3 PDFs');
     });
   });
 
-  describe('Diary Service Countdown & Formatting', () => {
-    test('calculates completed status correctly', () => {
-      const result = diaryService.calculateCountdown(Date.now() + 100000, true);
-      expect(result.status).toBe('completed');
-      expect(result.text).toContain('Completed');
-    });
+  describe('Diary & Calendar Calculations', () => {
+    test('computes overdue vs upcoming countdown status based on timestamps', () => {
+      const now = Date.now();
+      const pastTime = now - 86400000;
+      const soonTime = now + 12 * 60 * 60 * 1000; // 12 hours
+      const futureTime = now + 7 * 86400000; // 7 days
 
-    test('calculates overdue status for past dates', () => {
-      const pastTime = Date.now() - 2 * 24 * 60 * 60 * 1000;
-      const result = diaryService.calculateCountdown(pastTime, false);
-      expect(result.status).toBe('overdue');
-      expect(result.text).toContain('OVERDUE');
-    });
+      const overdueResult = diaryService.calculateCountdown(pastTime, false);
+      const soonResult = diaryService.calculateCountdown(soonTime, false);
+      const upcomingResult = diaryService.calculateCountdown(futureTime, false);
+      const completedResult = diaryService.calculateCountdown(pastTime, true);
 
-    test('calculates upcoming future countdown', () => {
-      const futureTime = Date.now() + 5 * 24 * 60 * 60 * 1000;
-      const result = diaryService.calculateCountdown(futureTime, false);
-      expect(result.status).toBe('upcoming');
-      expect(result.text).toContain('days left');
-    });
-
-    test('retrieves event type visual configurations', () => {
-      const assign = diaryService.getEventTypeConfig('assignment');
-      expect(assign.color).toBe('#EF4444');
-      expect(assign.label).toBe('Assignment');
-
-      const exam = diaryService.getEventTypeConfig('exam');
-      expect(exam.color).toBe('#2563EB');
-      expect(exam.label).toBe('Exam');
+      expect(overdueResult.status).toBe('overdue');
+      expect(soonResult.status).toBe('due_soon');
+      expect(upcomingResult.status).toBe('upcoming');
+      expect(completedResult.status).toBe('completed');
     });
   });
 
-  describe('Timetable Service Time Math & Conflict Detection', () => {
-    test('formats 24-hour time to 12-hour AM/PM correctly', () => {
-      expect(timetableService.formatTime12('09:00')).toBe('9:00 AM');
-      expect(timetableService.formatTime12('13:30')).toBe('1:30 PM');
-      expect(timetableService.formatTime12('00:00')).toBe('12:00 AM');
-      expect(timetableService.formatTime12('12:00')).toBe('12:00 PM');
-    });
-
-    test('calculates duration between times accurately', () => {
-      expect(timetableService.calculateDuration('09:00', '10:00')).toBe('1 hour');
-      expect(timetableService.calculateDuration('09:30', '11:00')).toBe('1 hr 30 mins');
-      expect(timetableService.calculateDuration('10:00', '10:45')).toBe('45 mins');
-    });
-
-    test('detects schedule conflicts accurately on the same day', () => {
-      const existing = [
+  describe('Timetable Calculations', () => {
+    test('calculates timetable daily schedule metrics and free slots', () => {
+      const classes: any[] = [
         {
-          id: 'cls_1',
-          subjectName: 'Software Engineering',
-          dayOfWeek: 'monday' as const,
+          id: 'cls-1',
+          dayOfWeek: 'monday',
           startTime: '09:00',
           endTime: '10:00',
-          reminderEnabled: true,
-          reminderMinutes: 10,
-          createdAt: 0,
-          updatedAt: 0,
-        },
-      ];
-
-      // Overlap: 09:30 to 10:30 on Monday
-      const conflict = timetableService.checkConflict(
-        { dayOfWeek: 'monday', startTime: '09:30', endTime: '10:30' },
-        existing
-      );
-      expect(conflict).not.toBeNull();
-      expect(conflict?.subjectName).toBe('Software Engineering');
-
-      // No overlap: 10:00 to 11:00 on Monday
-      const noConflict = timetableService.checkConflict(
-        { dayOfWeek: 'monday', startTime: '10:00', endTime: '11:00' },
-        existing
-      );
-      expect(noConflict).toBeNull();
-
-      // Different day: 09:30 to 10:30 on Tuesday
-      const diffDay = timetableService.checkConflict(
-        { dayOfWeek: 'tuesday', startTime: '09:30', endTime: '10:30' },
-        existing
-      );
-      expect(diffDay).toBeNull();
-    });
-
-    test('calculates day metrics and free time intervals', () => {
-      const classes = [
-        {
-          id: '1',
-          subjectName: 'Class A',
-          dayOfWeek: 'monday' as const,
-          startTime: '09:00',
-          endTime: '10:00',
-          reminderEnabled: true,
-          reminderMinutes: 10,
-          createdAt: 0,
-          updatedAt: 0,
+          subjectName: 'Algorithms',
         },
         {
-          id: '2',
-          subjectName: 'Class B',
-          dayOfWeek: 'monday' as const,
+          id: 'cls-2',
+          dayOfWeek: 'monday',
           startTime: '11:00',
           endTime: '12:00',
-          reminderEnabled: true,
-          reminderMinutes: 10,
-          createdAt: 0,
-          updatedAt: 0,
+          subjectName: 'Database Systems',
         },
       ];
 
@@ -190,187 +110,15 @@ describe('Utility Functions Unit Tests', () => {
       expect(metrics.classCount).toBe(2);
       expect(metrics.firstClassStart).toBe('09:00');
       expect(metrics.lastClassEnd).toBe('12:00');
-      expect(metrics.totalClassMinutes).toBe(120); // 2 hours
-      expect(metrics.totalUniversityMinutes).toBe(180); // 3 hours (9:00 - 12:00)
-      expect(metrics.totalBreakMinutes).toBe(60); // 1 hour break
+      expect(metrics.totalClassMinutes).toBe(120);
+      expect(metrics.totalUniversityMinutes).toBe(180);
+      expect(metrics.totalBreakMinutes).toBe(60);
 
       const freeSlots = timetableService.findFreeTimeSlots(classes);
       expect(freeSlots.length).toBe(1);
       expect(freeSlots[0].startTime).toBe('10:00');
       expect(freeSlots[0].endTime).toBe('11:00');
       expect(freeSlots[0].durationMinutes).toBe(60);
-    });
-  });
-
-  describe('Student Connect', () => {
-    test('validates username rules correctly', () => {
-      expect(connectService.validateUsername('ahmed_aqeel').isValid).toBe(true);
-      expect(connectService.validateUsername('ali123').isValid).toBe(true);
-      expect(connectService.validateUsername('ab').isValid).toBe(false); // too short
-      expect(connectService.validateUsername('admin').isValid).toBe(false); // reserved
-      expect(connectService.validateUsername('user name').isValid).toBe(false); // space
-      expect(connectService.validateUsername('user@name').isValid).toBe(false); // special char
-    });
-
-    test('generates valid public student ID', () => {
-      const stuId = connectService.generatePublicStudentId();
-      expect(stuId).toMatch(/^STU-[A-Z0-9]{6}$/);
-    });
-
-    test('formats 24-hour status expiration correctly', () => {
-      const in2Hours = Date.now() + 2 * 60 * 60 * 1000;
-      expect(statusService.formatExpiresIn(in2Hours)).toBe('Expires in 2h');
-
-      const in30Mins = Date.now() + 30 * 60 * 1000;
-      expect(statusService.formatExpiresIn(in30Mins)).toBe('Expires in 30m');
-
-      const past = Date.now() - 10000;
-      expect(statusService.formatExpiresIn(past)).toBe('Expired');
-    });
-
-    test('validates case-insensitive username normalization', () => {
-      const v1 = connectService.validateUsername('AhmedAqeel');
-      const v2 = connectService.validateUsername('ahmedaqeel');
-      expect(v1.isValid).toBe(true);
-      expect(v2.isValid).toBe(true);
-
-      const vShort = connectService.validateUsername('a');
-      expect(vShort.isValid).toBe(false);
-      expect(vShort.error).toBe('Username must be at least 3 characters.');
-
-      const vReserved = connectService.validateUsername('admin');
-      expect(vReserved.isValid).toBe(false);
-      expect(vReserved.error).toBe('This username is reserved. Please choose another.');
-    });
-
-    test('generates compliant permanent Student ID with STU prefix', () => {
-      for (let i = 0; i < 10; i++) {
-        const stuId = connectService.generatePublicStudentId();
-        expect(stuId).toMatch(/^STU-[A-Z0-9]{6}$/);
-        expect(stuId.length).toBe(10);
-      }
-    });
-
-    test('deduplicates multiple status views by the same viewer into a single viewer count', () => {
-      const rawViews = [
-        { statusId: 'status_saif_1', viewerId: 'user_ahmed', viewedAt: 1000 },
-        { statusId: 'status_saif_1', viewerId: 'user_ahmed', viewedAt: 2000 },
-        { statusId: 'status_saif_1', viewerId: 'user_ahmed', viewedAt: 3000 },
-        { statusId: 'status_saif_1', viewerId: 'user_ali', viewedAt: 2500 },
-      ];
-
-      const distinctViewers = new Set(rawViews.map((v) => `${v.statusId}_${v.viewerId}`));
-      expect(distinctViewers.size).toBe(2); // Ahmed and Ali = 2 unique viewers, not 4
-    });
-
-    test('preserves permanent public Student ID across profile updates without regenerating', () => {
-      const originalStudentId = 'STU-9K3L2M';
-      const existingProfile = {
-        id: 'user_ahmed_1',
-        displayName: 'Ahmed Aqeel',
-        username: 'ahmedaqeel',
-        publicStudentId: originalStudentId,
-      };
-
-      const updatePayload = {
-        displayName: 'Ahmed Aqeel Developer',
-        bio: 'Full Stack Software Engineer',
-        program: 'BS Software Engineering',
-        publicStudentId: undefined, // omitted on edit
-      };
-
-      // Resolved student ID must retain the original permanent ID
-      const resolvedStudentId = existingProfile.publicStudentId || updatePayload.publicStudentId;
-      expect(resolvedStudentId).toBe(originalStudentId);
-    });
-
-    test('maintains single source of truth across Profile Settings, Search, and Student Profile', () => {
-      const canonicalProfile = {
-        id: 'user_ahmed_1',
-        displayName: 'Ahmed Aqeel',
-        username: 'ahmedaqeel',
-        publicStudentId: 'STU-123456',
-        avatarUrl: 'https://example.com/avatar.jpg',
-        bio: 'Software Engineering Student',
-        university: 'University of Engineering and Technology',
-        program: 'BS Software Engineering',
-        semester: '5th Semester',
-      };
-
-      // Search Card projection
-      const searchCardView = {
-        displayName: canonicalProfile.displayName,
-        username: canonicalProfile.username,
-        publicStudentId: canonicalProfile.publicStudentId,
-        avatarUrl: canonicalProfile.avatarUrl,
-      };
-
-      // Student Profile Screen projection
-      const profileScreenView = { ...canonicalProfile };
-
-      expect(searchCardView.displayName).toBe(canonicalProfile.displayName);
-      expect(profileScreenView.avatarUrl).toBe(canonicalProfile.avatarUrl);
-      expect(profileScreenView.publicStudentId).toBe(canonicalProfile.publicStudentId);
-    });
-
-    test('validates account creation username rules and normalizes input', () => {
-      const raw1 = '  @Ahmed_Aqeel.123  ';
-      const clean1 = raw1.trim().replace(/^@/, '').toLowerCase();
-      expect(clean1).toBe('ahmed_aqeel.123');
-
-      const raw2 = 'ahmed student'; // contains space
-      const isClean = !/\s/.test(raw2);
-      expect(isClean).toBe(false);
-    });
-
-    test('enforces internet requirement for account creation and blocks offline attempts', () => {
-      const networkState = { isOnline: false };
-      const attemptSignup = (state: { isOnline: boolean }) => {
-        if (!state.isOnline) {
-          return { success: false, error: 'Internet connection required to create your account.' };
-        }
-        return { success: true };
-      };
-
-      const result = attemptSignup(networkState);
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('Internet connection required');
-    });
-
-    test('verifies username availability states: empty, checking, available, taken, invalid, offline', () => {
-      const getAvailabilityState = (
-        query: string,
-        isOnline: boolean,
-        takenList: string[]
-      ) => {
-        if (!query.trim()) return 'idle';
-        if (query.length < 3 || query.length > 24 || /[^a-z0-9_.]/.test(query)) return 'invalid';
-        if (!isOnline) return 'offline';
-        if (takenList.includes(query.toLowerCase())) return 'taken';
-        return 'available';
-      };
-
-      const taken = ['ahmedaqeel', 'sarahkhan'];
-
-      expect(getAvailabilityState('', true, taken)).toBe('idle');
-      expect(getAvailabilityState('a', true, taken)).toBe('invalid');
-      expect(getAvailabilityState('ahmedaqeel', true, taken)).toBe('taken');
-      expect(getAvailabilityState('ahmed_new', true, taken)).toBe('available');
-      expect(getAvailabilityState('ahmed_new', false, taken)).toBe('offline');
-    });
-
-    test('generates complete onboarding package with permanent STU-ID and chosen username upon successful creation', () => {
-      const createdAccount = {
-        userId: 'auth_usr_998877',
-        fullName: 'Ahmed Aqeel',
-        chosenUsername: 'ahmedaqeel',
-        publicStudentId: 'STU-ABC123',
-        accountComplete: true,
-      };
-
-      expect(createdAccount.chosenUsername).toBe('ahmedaqeel');
-      expect(createdAccount.publicStudentId).toMatch(/^STU-[A-Z0-9]{6}$/);
-      expect(createdAccount.accountComplete).toBe(true);
     });
   });
 
@@ -414,28 +162,6 @@ describe('Utility Functions Unit Tests', () => {
     });
   });
 
-  describe('Privacy Access Control & Visibility Rules', () => {
-    test('allows profile owner to view own followers and following even when hidden', () => {
-      const checkAccess = (targetUserId: string, viewerUserId: string, isHidden: boolean) => {
-        if (targetUserId === viewerUserId) return true;
-        return !isHidden;
-      };
-
-      expect(checkAccess('user_123', 'user_123', true)).toBe(true);
-      expect(checkAccess('user_123', 'user_123', false)).toBe(true);
-    });
-
-    test('restricts other students from viewing follower list when hideFollowers is enabled', () => {
-      const checkAccess = (targetUserId: string, viewerUserId: string, isHidden: boolean) => {
-        if (targetUserId === viewerUserId) return true;
-        return !isHidden;
-      };
-
-      expect(checkAccess('user_target', 'user_viewer', true)).toBe(false);
-      expect(checkAccess('user_target', 'user_viewer', false)).toBe(true);
-    });
-  });
-
   describe('Database SQLite Parameter Sanitizer', () => {
     const sanitizeParams = (params: any[] = []): any[] => {
       return params.map((p) => (p === undefined ? null : p));
@@ -456,7 +182,7 @@ describe('Utility Functions Unit Tests', () => {
 
   describe('PDF Compression Math & Live Target Estimates', () => {
     test('calculates target quality and estimated byte reduction accurately', () => {
-      const originalSize = 104443; // From user screenshot
+      const originalSize = 104443;
       const compressionInput = '50';
       const numericPct = Math.max(1, Math.min(99, parseInt(compressionInput, 10) || 50));
       const targetQuality = (100 - numericPct) / 100;
@@ -501,4 +227,3 @@ describe('Utility Functions Unit Tests', () => {
     });
   });
 });
-

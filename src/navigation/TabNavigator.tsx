@@ -50,6 +50,7 @@ export const TabNavigator: React.FC = () => {
         component={HomeScreen as any}
         options={{
           tabBarLabel: 'Home',
+          tabBarAccessibilityLabel: 'Home tab',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'home' : 'home-outline'} size={22} color={color} />
           ),
@@ -60,6 +61,7 @@ export const TabNavigator: React.FC = () => {
         component={SubjectsScreen as any}
         options={{
           tabBarLabel: 'Subjects',
+          tabBarAccessibilityLabel: 'Subjects tab',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'folder-open' : 'folder-open-outline'} size={22} color={color} />
           ),
@@ -70,6 +72,7 @@ export const TabNavigator: React.FC = () => {
         component={ScannerScreen as any}
         options={{
           tabBarLabel: 'Scan',
+          tabBarAccessibilityLabel: 'Document scanner tab',
           tabBarIcon: () => (
             <View style={[styles.scanButton, { backgroundColor: theme.colors.primary, top: -14 }]}>
               <Ionicons name="camera" size={26} color="#FFFFFF" />
@@ -88,6 +91,7 @@ export const TabNavigator: React.FC = () => {
         component={SearchScreen as any}
         options={{
           tabBarLabel: 'Search',
+          tabBarAccessibilityLabel: 'Search tab',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'search' : 'search-outline'} size={22} color={color} />
           ),
@@ -98,6 +102,7 @@ export const TabNavigator: React.FC = () => {
         component={SettingsScreen as any}
         options={{
           tabBarLabel: 'Settings',
+          tabBarAccessibilityLabel: 'Settings tab',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'settings' : 'settings-outline'} size={22} color={color} />
           ),

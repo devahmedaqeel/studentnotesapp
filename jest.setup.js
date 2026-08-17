@@ -139,9 +139,15 @@ jest.mock('expo-av', () => ({
   },
 }));
 
-jest.mock('expo-camera', () => ({
-  CameraView: () => null,
-  useCameraPermissions: () => [{ granted: true }, jest.fn()],
+jest.mock('expo-document-picker', () => ({
+  getDocumentAsync: jest.fn(() => Promise.resolve({
+    canceled: false,
+    assets: [{ uri: 'file:///mock/document.pdf', name: 'Document.pdf', size: 2048 }],
+  })),
+}));
+
+jest.mock('expo-print', () => ({
+  printToFileAsync: jest.fn(() => Promise.resolve({ uri: 'file:///mock/printed.pdf' })),
 }));
 
 jest.setTimeout(15000);

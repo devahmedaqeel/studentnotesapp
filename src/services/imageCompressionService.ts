@@ -13,27 +13,28 @@ export const DEFAULT_IMAGE_PRESETS: Record<Exclude<CompressionPreset, 'custom'>,
   original: {
     preset: 'original',
     quality: 0.95,
+    maxResolution: 3840,
     format: 'jpeg',
     preserveAspectRatio: true,
   },
   high_quality: {
     preset: 'high_quality',
     quality: 0.85,
-    maxResolution: 2500,
+    maxResolution: 2560,
     format: 'jpeg',
     preserveAspectRatio: true,
   },
   balanced: {
     preset: 'balanced',
-    quality: 0.70,
-    maxResolution: 2000,
+    quality: 0.65,
+    maxResolution: 1920,
     format: 'jpeg',
     preserveAspectRatio: true,
   },
   small: {
     preset: 'small',
-    quality: 0.50,
-    maxResolution: 1400,
+    quality: 0.40,
+    maxResolution: 1440,
     format: 'jpeg',
     preserveAspectRatio: true,
   },
@@ -73,7 +74,16 @@ export const imageCompressionService = {
                 format: ext,
               });
             },
-            (err) => reject(err)
+            () => {
+              // Fallback metadata if native getSize fails
+              resolve({
+                uri,
+                width: 1920,
+                height: 1080,
+                fileSize,
+                format: ext,
+              });
+            }
           );
         })
         .catch(reject);
@@ -95,12 +105,12 @@ export const imageCompressionService = {
 
     const safePct = Math.max(1, Math.min(99, compressionPercent));
     const quality = (100 - safePct) / 100;
-    let factor = Math.max(0.08, Math.min(0.98, quality));
+    let factor = Math.max(0.08, Math.min(0.95, quality * 0.85));
 
     if (format === 'webp') {
-      factor *= 0.82;
+      factor *= 0.85;
     } else if (format === 'png') {
-      factor *= 1.25;
+      factor = Math.max(0.40, factor * 1.3);
     }
 
     const estimatedSize = Math.max(100, Math.round(originalSize * factor));
@@ -115,7 +125,33 @@ export const imageCompressionService = {
   },
 
   /**
-   * Compresses a single image with exact target compression quality (0.01 - 0.99).
+   * Calculates intelligent maxResolution limit based on requested quality / compression level.
+   */
+  computeEffectiveMaxResolution(config: ImageCompressionConfig, width: number, height: number): number | undefined {
+    if (config.maxResolution && config.maxResolution > 0) {
+      return config.maxResolution;
+    }
+
+    const maxDim = Math.max(width, height);
+    const q = config.quality;
+
+    if (q <= 0.45) {
+      // Strong compression: reduce huge camera photos (e.g. 4000x3000 -> 1440x1080)
+      return Math.min(maxDim, 1440);
+    } else if (q <= 0.70) {
+      // Balanced compression
+      return Math.min(maxDim, 1920);
+    } else if (q <= 0.88) {
+      // High quality
+      return Math.min(maxDim, 2560);
+    }
+
+    return undefined;
+  },
+
+  /**
+   * Compresses a single image with guaranteed physical byte reduction when possible.
+   * Performs actual image re-encoding, resolution optimization, and file system size verification.
    */
   async compressImage(
     uri: string,
@@ -124,7 +160,7 @@ export const imageCompressionService = {
   ): Promise<CompressionResult> {
     const isValid = await this.validateImage(uri);
     if (!isValid) {
-      throw new Error('Unable to process this image. Please try another image.');
+      throw new Error('Unable to process this image. File does not exist or is inaccessible.');
     }
 
     const origInfo = await FileSystem.getInfoAsync(uri);
@@ -134,21 +170,18 @@ export const imageCompressionService = {
       Image.getSize(
         uri,
         (w, h) => resolve({ width: w, height: h }),
-        () => resolve({ width: 1200, height: 1600 })
+        () => resolve({ width: 1920, height: 1080 })
       );
     });
 
+    const targetMaxRes = this.computeEffectiveMaxResolution(config, meta.width, meta.height);
     const actions: ImageManipulator.Action[] = [];
 
-    // Optional aspect-ratio preserving maxResolution limit if configured
-    if (config.maxResolution && config.maxResolution > 0) {
-      const maxDim = Math.max(meta.width, meta.height);
-      if (maxDim > config.maxResolution) {
-        if (meta.width >= meta.height) {
-          actions.push({ resize: { width: config.maxResolution } });
-        } else {
-          actions.push({ resize: { height: config.maxResolution } });
-        }
+    if (targetMaxRes && Math.max(meta.width, meta.height) > targetMaxRes) {
+      if (meta.width >= meta.height) {
+        actions.push({ resize: { width: targetMaxRes } });
+      } else {
+        actions.push({ resize: { height: targetMaxRes } });
       }
     }
 
@@ -159,17 +192,48 @@ export const imageCompressionService = {
         ? ImageManipulator.SaveFormat.WEBP
         : ImageManipulator.SaveFormat.JPEG;
 
-    const result = await ImageManipulator.manipulateAsync(uri, actions, {
-      compress: Math.max(0.05, Math.min(0.99, config.quality)),
+    const targetQuality = Math.max(0.05, Math.min(0.95, config.quality));
+
+    // First pass compression
+    let result = await ImageManipulator.manipulateAsync(uri, actions, {
+      compress: targetQuality,
       format: saveFormat,
       base64: includeBase64,
     });
 
-    const compInfo = await FileSystem.getInfoAsync(result.uri);
-    const compressedSize = (compInfo as any).size || 0;
+    let compInfo = await FileSystem.getInfoAsync(result.uri);
+    let compressedSize = (compInfo as any).size || 0;
+
+    // Safety multi-pass: If compressed output is NOT smaller than original (and original > 40 KB)
+    if (compressedSize >= originalSize && originalSize > 40960) {
+      const fallbackActions: ImageManipulator.Action[] = [];
+      const fallbackMaxDim = Math.min(meta.width, meta.height, 1280);
+      if (meta.width >= meta.height) {
+        fallbackActions.push({ resize: { width: fallbackMaxDim } });
+      } else {
+        fallbackActions.push({ resize: { height: fallbackMaxDim } });
+      }
+
+      const secondPass = await ImageManipulator.manipulateAsync(uri, fallbackActions, {
+        compress: Math.max(0.05, targetQuality * 0.75),
+        format: ImageManipulator.SaveFormat.JPEG,
+        base64: includeBase64,
+      });
+
+      const secondInfo = await FileSystem.getInfoAsync(secondPass.uri);
+      const secondSize = (secondInfo as any).size || 0;
+
+      if (secondSize < originalSize) {
+        result = secondPass;
+        compressedSize = secondSize;
+      }
+    }
+
     const savedBytes = Math.max(0, originalSize - compressedSize);
     const savedPercentage =
-      originalSize > 0 ? Math.round((savedBytes / originalSize) * 100) : 0;
+      originalSize > 0 && compressedSize < originalSize
+        ? Math.round((savedBytes / originalSize) * 100)
+        : 0;
 
     return {
       uri: result.uri,
@@ -216,7 +280,7 @@ export const imageCompressionService = {
   async cleanupTempFiles(uris: string[]): Promise<void> {
     for (const uri of uris) {
       try {
-        if (uri.includes('ImageManipulator') || uri.includes('cache')) {
+        if (uri && (uri.includes('ImageManipulator') || uri.includes('cache') || uri.includes('saved_'))) {
           await FileSystem.deleteAsync(uri, { idempotent: true });
         }
       } catch {
@@ -298,8 +362,7 @@ export const imageCompressionService = {
           await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
         }
       } catch (albumErr) {
-        // Asset is already saved in main gallery even if album creation fails
-        console.warn('Album grouping notice:', albumErr);
+        console.warn('Could not place image in StudentNotes album:', albumErr);
       }
 
       return {
@@ -307,95 +370,60 @@ export const imageCompressionService = {
         assetId: asset.id,
       };
     } catch (err: any) {
-      console.error('Gallery save error:', err);
+      console.warn('Save to gallery error:', err);
       return {
         success: false,
-        error: err.message || 'Unable to save image. Please try again.',
+        error: err.message || 'Failed to save image to device Gallery.',
       };
     }
   },
 
   /**
-   * Saves a batch of images to the device Gallery / Photos.
+   * Saves a batch of images to the device Gallery.
    */
   async saveMultipleImagesToGallery(
-    imageUris: string[],
-    baseFormat: string = 'jpeg'
+    uris: string[],
+    format: string = 'jpg'
   ): Promise<{ success: boolean; savedCount?: number; error?: string; isPermissionDenied?: boolean; canAskAgain?: boolean }> {
-    try {
-      if (!imageUris || imageUris.length === 0) {
-        return { success: false, error: 'No images to save.' };
-      }
+    if (!uris || uris.length === 0) {
+      return { success: false, error: 'No images to save.' };
+    }
 
-      const permCheck = await MediaLibrary.getPermissionsAsync();
-      let hasPermission = permCheck.granted;
-      let canAskAgain = permCheck.canAskAgain;
+    const permCheck = await MediaLibrary.getPermissionsAsync();
+    let hasPermission = permCheck.granted;
+    let canAskAgain = permCheck.canAskAgain;
 
-      if (!hasPermission) {
-        const permReq = await MediaLibrary.requestPermissionsAsync();
-        hasPermission = permReq.granted;
-        canAskAgain = permReq.canAskAgain;
-      }
+    if (!hasPermission) {
+      const permReq = await MediaLibrary.requestPermissionsAsync();
+      hasPermission = permReq.granted;
+      canAskAgain = permReq.canAskAgain;
+    }
 
-      if (!hasPermission) {
-        return {
-          success: false,
-          isPermissionDenied: true,
-          canAskAgain,
-          error: canAskAgain
-            ? 'Permission is required to save images to your device Gallery.'
-            : 'Permission permanently denied. Please enable Photos/Media permission in device Settings to save images.',
-        };
-      }
-
-      const assets: MediaLibrary.Asset[] = [];
-      for (let i = 0; i < imageUris.length; i++) {
-        const uri = imageUris[i];
-        const fileInfo = await FileSystem.getInfoAsync(uri);
-        if (fileInfo.exists) {
-          const ext = baseFormat === 'png' ? 'png' : baseFormat === 'webp' ? 'webp' : 'jpg';
-          const tempCopyUri = `${FileSystem.cacheDirectory}batch_${Date.now()}_${i}.${ext}`;
-          try {
-            await FileSystem.copyAsync({ from: uri, to: tempCopyUri });
-            const asset = await MediaLibrary.createAssetAsync(tempCopyUri);
-            if (asset) assets.push(asset);
-          } catch {
-            const asset = await MediaLibrary.createAssetAsync(uri);
-            if (asset) assets.push(asset);
-          }
-        }
-      }
-
-      if (assets.length === 0) {
-        return { success: false, error: 'Failed to create gallery assets for compressed images.' };
-      }
-
-      try {
-        const album = await MediaLibrary.getAlbumAsync('StudentNotes');
-        if (album === null) {
-          await MediaLibrary.createAlbumAsync('StudentNotes', assets[0], false);
-          if (assets.length > 1) {
-            const newAlbum = await MediaLibrary.getAlbumAsync('StudentNotes');
-            if (newAlbum) {
-              await MediaLibrary.addAssetsToAlbumAsync(assets.slice(1), newAlbum, false);
-            }
-          }
-        } else {
-          await MediaLibrary.addAssetsToAlbumAsync(assets, album, false);
-        }
-      } catch (albumErr) {
-        console.warn('Batch album grouping notice:', albumErr);
-      }
-
-      return {
-        success: true,
-        savedCount: assets.length,
-      };
-    } catch (err: any) {
+    if (!hasPermission) {
       return {
         success: false,
-        error: err.message || 'Unable to save images to Gallery.',
+        isPermissionDenied: true,
+        canAskAgain,
+        error: canAskAgain
+          ? 'Permission is required to save images to your device Gallery.'
+          : 'Permission permanently denied. Please enable Photos/Media permission in device Settings to save images.',
       };
     }
+
+    let savedCount = 0;
+    const ext = format === 'png' ? 'png' : format === 'webp' ? 'webp' : 'jpg';
+
+    for (let i = 0; i < uris.length; i++) {
+      const filename = `StudentNotes_Compressed_${Date.now()}_${i + 1}.${ext}`;
+      const res = await this.saveImageToGallery(uris[i], filename);
+      if (res.success) {
+        savedCount++;
+      }
+    }
+
+    return {
+      success: savedCount > 0,
+      savedCount,
+    };
   },
 };

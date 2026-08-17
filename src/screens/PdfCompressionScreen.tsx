@@ -147,6 +147,7 @@ export const PdfCompressionScreen: React.FC<Props> = ({ navigation, route }) => 
         preserveAspectRatio: true,
       };
 
+      let savedPct = 0;
       if (activeTarget.isExternal) {
         const res = await pdfCompressionService.compressExternalPdf(
           activeTarget.uri,
@@ -154,6 +155,7 @@ export const PdfCompressionScreen: React.FC<Props> = ({ navigation, route }) => 
           conf,
           (msg) => setStatusMsg(msg)
         );
+        savedPct = res.savedPercentage;
         setCompressedResult({
           uri: res.uri,
           originalSize: res.originalSize,
@@ -166,6 +168,7 @@ export const PdfCompressionScreen: React.FC<Props> = ({ navigation, route }) => 
           conf,
           (msg) => setStatusMsg(msg)
         );
+        savedPct = res.savedPercentage;
         setCompressedResult({
           uri: res.compressedPdf.filePath,
           originalSize: res.originalSize,
@@ -173,6 +176,13 @@ export const PdfCompressionScreen: React.FC<Props> = ({ navigation, route }) => 
           savedPercentage: res.savedPercentage,
           pdfDocument: res.compressedPdf,
         });
+      }
+
+      if (savedPct <= 0) {
+        Alert.alert(
+          'Already Optimized',
+          'This PDF document is already compact and cannot be reduced further without significant quality loss.'
+        );
       }
     } catch (err: any) {
       Alert.alert('PDF Compression Error', err.message || 'Unable to compress this PDF.');

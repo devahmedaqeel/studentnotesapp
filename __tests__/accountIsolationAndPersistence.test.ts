@@ -1,5 +1,4 @@
 import { syncService, LOCAL_DATA_OWNER_KEY, LAST_SYNCED_KEY } from '../src/services/syncService';
-import { presenceService } from '../src/services/presenceService';
 import { savedLinkRepository } from '../src/database/repositories/savedLinkRepository';
 import { supabase } from '../src/services/supabase';
 import { getDatabase } from '../src/database/database';
@@ -126,16 +125,6 @@ describe('Account Isolation, Data Persistence & Supabase Sync Test Suite', () =>
       // User A attempts to sync
       const result = await syncService.syncLocalDataToCloud(USER_A_ID);
       expect(result).toBe(false);
-    });
-  });
-
-  describe('4. Realtime Subscription Cleanup on Logout', () => {
-    test('stopPresence unsubscribes channels and resets active user', async () => {
-      await presenceService.startPresence(USER_A_ID);
-      await presenceService.stopPresence();
-
-      // Ensure presence is cleanly stopped
-      expect(true).toBe(true);
     });
   });
 });

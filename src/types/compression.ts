@@ -6,17 +6,17 @@ export interface ImageCompressionConfig {
   preset: CompressionPreset;
   quality: number; // 0.1 to 1.0
   maxResolution?: number; // e.g. 1200, 1600, 2000, 2500, 3000, 4000
-  format: OutputFormat;
-  preserveAspectRatio: boolean;
+  format?: OutputFormat;
+  preserveAspectRatio?: boolean;
 }
 
 export interface PdfCompressionConfig {
   preset: CompressionPreset;
   quality: number; // 0.1 to 1.0
   maxResolution?: number; // e.g. 1200, 1600, 2000, 2500, 3000
-  pageSize: PageSize;
-  format: OutputFormat;
-  preserveAspectRatio: boolean;
+  pageSize?: PageSize;
+  format?: OutputFormat;
+  preserveAspectRatio?: boolean;
 }
 
 export interface ImageMetadata {

@@ -1,6 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Print from 'expo-print';
+import { PDFDocument } from 'pdf-lib';
 import { fileService } from './fileService';
 import { imageCompressionService } from './imageCompressionService';
 import { pdfRepository } from '../database/repositories/pdfRepository';
@@ -9,6 +10,7 @@ import { noteRepository } from '../database/repositories/noteRepository';
 import { PdfDocument } from '../types/pdf';
 import { PdfCompressionConfig } from '../types/compression';
 import { generateId } from '../utils/id';
+import { base64ToUint8Array, uint8ArrayToBase64 } from '../utils/binary';
 
 export const pdfCompressionService = {
   /**
@@ -90,7 +92,7 @@ export const pdfCompressionService = {
   ): Promise<{ compressedPdf: PdfDocument; originalSize: number; compressedSize: number; savedPercentage: number }> {
     const { pdf, fileSize: originalSize } = await this.getPdfMetadata(pdfId);
 
-    onProgress?.('Preparing PDF for compression...', 0, 100);
+    onProgress?.('Preparing PDF for compression...', 10, 100);
 
     // Check if there are corresponding note pages or image sources for this PDF
     const allNotes = await noteRepository.getAll();
@@ -108,25 +110,29 @@ export const pdfCompressionService = {
 
     const compressedPdfId = generateId('pdf_comp');
     const quality = Math.max(0.1, Math.min(0.95, config.quality || 0.5));
+    const targetSubjectId = pdf.subjectId || (await this.getValidSubjectId());
 
+    // 1. If we have the source note image pages, generate a clean re-compressed native PDF
     if (pageImages.length > 0) {
-      // Recompress source images and generate a lightweight PDF
       const totalPages = pageImages.length;
       const base64Pages: string[] = [];
+      const tempUris: string[] = [];
 
       for (let i = 0; i < totalPages; i++) {
-        onProgress?.(`Compressing page ${i + 1} of ${totalPages}...`, i + 1, totalPages);
+        onProgress?.(`Compressing page ${i + 1} of ${totalPages}...`, 10 + Math.round(((i + 1) / totalPages) * 70), 100);
         const comp = await imageCompressionService.compressImage(
           pageImages[i],
           {
             preset: config.preset || 'custom',
             quality,
-            maxResolution: quality < 0.5 ? 1200 : 1600,
+            maxResolution: quality < 0.45 ? 1280 : quality < 0.70 ? 1600 : 2048,
             format: 'jpeg',
             preserveAspectRatio: true,
           },
           true
         );
+
+        tempUris.push(comp.uri);
 
         if (comp.base64) {
           base64Pages.push(`data:image/jpeg;base64,${comp.base64}`);
@@ -135,6 +141,8 @@ export const pdfCompressionService = {
           base64Pages.push(`data:image/jpeg;base64,${b64}`);
         }
       }
+
+      onProgress?.('Generating compressed PDF output...', 85, 100);
 
       const htmlContent = `
         <!DOCTYPE html>
@@ -156,16 +164,21 @@ export const pdfCompressionService = {
       `;
 
       const { uri } = await Print.printToFileAsync({ html: htmlContent, base64: false });
-      const persistentPath = await fileService.savePdfFile(uri, pdf.subjectId, compressedPdfId);
+      const persistentPath = await fileService.savePdfFile(uri, targetSubjectId, compressedPdfId);
+      await imageCompressionService.cleanupTempFiles([...tempUris, uri]);
 
       const outInfo = await FileSystem.getInfoAsync(persistentPath);
-      const compressedSize = (outInfo as any).size || Math.round(originalSize * quality);
-      const savedPercentage = originalSize > 0 ? Math.max(0, Math.round(((originalSize - compressedSize) / originalSize) * 100)) : 0;
+      const compressedSize = (outInfo as any).size || 0;
+      const savedBytes = Math.max(0, originalSize - compressedSize);
+      const savedPercentage =
+        originalSize > 0 && compressedSize < originalSize
+          ? Math.round((savedBytes / originalSize) * 100)
+          : 0;
 
       const createdPdf = await pdfRepository.create({
         id: compressedPdfId,
         title: `${pdf.title} (Compressed)`,
-        subjectId: pdf.subjectId,
+        subjectId: targetSubjectId,
         folderId: pdf.folderId,
         filePath: persistentPath,
         pageCount: totalPages,
@@ -181,34 +194,90 @@ export const pdfCompressionService = {
       };
     }
 
-    // Fallback direct copy and optimize for external/generic PDFs without rasterizer
-    const targetSubjectId = pdf.subjectId || (await this.getValidSubjectId());
-    const tempDest = `${FileSystem.cacheDirectory}${compressedPdfId}.pdf`;
-    await FileSystem.copyAsync({ from: pdf.filePath, to: tempDest });
-    const persistentPath = await fileService.savePdfFile(tempDest, targetSubjectId, compressedPdfId);
+    // 2. For external or generic PDFs, use pdf-lib structure optimization and object stream compression
+    onProgress?.('Analyzing and optimizing PDF structure...', 30, 100);
+    try {
+      const base64Content = await FileSystem.readAsStringAsync(pdf.filePath, {
+        encoding: 'base64' as any,
+      });
+      const pdfBytes = base64ToUint8Array(base64Content);
 
-    const outInfo = await FileSystem.getInfoAsync(persistentPath);
-    const actualOut = (outInfo as any).size || originalSize;
-    const estimatedCompSize = Math.max(500, Math.round(actualOut * quality));
-    const savedPct = Math.max(1, Math.round(((actualOut - estimatedCompSize) / actualOut) * 100));
+      const srcDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+      const newDoc = await PDFDocument.create();
 
-    const createdPdf = await pdfRepository.create({
-      id: compressedPdfId,
-      title: `${pdf.title} (Compressed)`,
-      subjectId: targetSubjectId,
-      folderId: pdf.folderId,
-      filePath: persistentPath,
-      pageCount: pdf.pageCount || 1,
-      fileSize: estimatedCompSize,
-    });
+      const pageIndices = srcDoc.getPageIndices();
+      const copiedPages = await newDoc.copyPages(srcDoc, pageIndices);
+      for (const page of copiedPages) {
+        newDoc.addPage(page);
+      }
 
-    onProgress?.('Compression complete!', 100, 100);
-    return {
-      compressedPdf: createdPdf,
-      originalSize,
-      compressedSize: estimatedCompSize,
-      savedPercentage: savedPct,
-    };
+      onProgress?.('Compressing cross-reference object streams...', 70, 100);
+      const compressedBytes = await newDoc.save({ useObjectStreams: true });
+      const compressedBase64 = uint8ArrayToBase64(compressedBytes);
+
+      const tempDest = `${FileSystem.cacheDirectory}${compressedPdfId}.pdf`;
+      await FileSystem.writeAsStringAsync(tempDest, compressedBase64, {
+        encoding: 'base64' as any,
+      });
+
+      const persistentPath = await fileService.savePdfFile(tempDest, targetSubjectId, compressedPdfId);
+      await FileSystem.deleteAsync(tempDest, { idempotent: true });
+
+      const outInfo = await FileSystem.getInfoAsync(persistentPath);
+      let compressedSize = (outInfo as any).size || compressedBytes.length;
+
+      // If object streams didn't reduce size (already compressed), keep actual measured size
+      const savedBytes = Math.max(0, originalSize - compressedSize);
+      const savedPercentage =
+        originalSize > 0 && compressedSize < originalSize
+          ? Math.round((savedBytes / originalSize) * 100)
+          : 0;
+
+      const createdPdf = await pdfRepository.create({
+        id: compressedPdfId,
+        title: `${pdf.title} (Compressed)`,
+        subjectId: targetSubjectId,
+        folderId: pdf.folderId,
+        filePath: persistentPath,
+        pageCount: pageIndices.length || pdf.pageCount || 1,
+        fileSize: compressedSize,
+      });
+
+      onProgress?.('Compression complete!', 100, 100);
+      return {
+        compressedPdf: createdPdf,
+        originalSize,
+        compressedSize,
+        savedPercentage,
+      };
+    } catch (streamErr) {
+      console.warn('PDF stream optimization fallback:', streamErr);
+
+      const tempDest = `${FileSystem.cacheDirectory}${compressedPdfId}.pdf`;
+      await FileSystem.copyAsync({ from: pdf.filePath, to: tempDest });
+      const persistentPath = await fileService.savePdfFile(tempDest, targetSubjectId, compressedPdfId);
+
+      const outInfo = await FileSystem.getInfoAsync(persistentPath);
+      const actualOut = (outInfo as any).size || originalSize;
+
+      const createdPdf = await pdfRepository.create({
+        id: compressedPdfId,
+        title: `${pdf.title} (Compressed)`,
+        subjectId: targetSubjectId,
+        folderId: pdf.folderId,
+        filePath: persistentPath,
+        pageCount: pdf.pageCount || 1,
+        fileSize: actualOut,
+      });
+
+      onProgress?.('Compression complete!', 100, 100);
+      return {
+        compressedPdf: createdPdf,
+        originalSize,
+        compressedSize: actualOut,
+        savedPercentage: 0,
+      };
+    }
   },
 
   /**
@@ -223,42 +292,96 @@ export const pdfCompressionService = {
     const origInfo = await FileSystem.getInfoAsync(sourceUri);
     const originalSize = (origInfo as any).size || 0;
 
-    onProgress?.('Importing & optimizing PDF...', 20, 100);
+    onProgress?.('Importing and analyzing PDF document...', 20, 100);
 
     const subjectId = await this.getValidSubjectId();
     const pdfId = generateId('pdf_ext');
-    const quality = Math.max(0.1, Math.min(0.95, config.quality || 0.5));
-
-    const tempDest = `${FileSystem.cacheDirectory}${pdfId}.pdf`;
-    await FileSystem.copyAsync({ from: sourceUri, to: tempDest });
-    const persistentPath = await fileService.savePdfFile(tempDest, subjectId, pdfId);
-
-    const outInfo = await FileSystem.getInfoAsync(persistentPath);
-    const actualOut = (outInfo as any).size || originalSize;
-    const compressedSize = Math.max(500, Math.round(actualOut * quality));
-    const savedPercentage = originalSize > 0 ? Math.max(1, Math.round(((originalSize - compressedSize) / originalSize) * 100)) : 0;
-
-    onProgress?.('Saving to library...', 90, 100);
-
     const cleanTitle = title.replace(/\.pdf$/i, '').trim();
-    const createdPdf = await pdfRepository.create({
-      id: pdfId,
-      title: `${cleanTitle} (Compressed)`,
-      subjectId,
-      filePath: persistentPath,
-      pageCount: 1,
-      fileSize: compressedSize,
-    });
 
-    onProgress?.('Compression complete!', 100, 100);
+    try {
+      const base64Content = await FileSystem.readAsStringAsync(sourceUri, {
+        encoding: 'base64' as any,
+      });
+      const pdfBytes = base64ToUint8Array(base64Content);
 
-    return {
-      uri: persistentPath,
-      originalSize: originalSize || actualOut,
-      compressedSize,
-      savedPercentage,
-      createdPdf,
-    };
+      onProgress?.('Rebuilding PDF with object stream compression...', 50, 100);
+      const srcDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+      const newDoc = await PDFDocument.create();
+
+      const pageIndices = srcDoc.getPageIndices();
+      const copiedPages = await newDoc.copyPages(srcDoc, pageIndices);
+      for (const page of copiedPages) {
+        newDoc.addPage(page);
+      }
+
+      onProgress?.('Compressing and finalizing output...', 80, 100);
+      const compressedBytes = await newDoc.save({ useObjectStreams: true });
+      const compressedBase64 = uint8ArrayToBase64(compressedBytes);
+
+      const tempDest = `${FileSystem.cacheDirectory}${pdfId}.pdf`;
+      await FileSystem.writeAsStringAsync(tempDest, compressedBase64, {
+        encoding: 'base64' as any,
+      });
+
+      const persistentPath = await fileService.savePdfFile(tempDest, subjectId, pdfId);
+      await FileSystem.deleteAsync(tempDest, { idempotent: true });
+
+      const outInfo = await FileSystem.getInfoAsync(persistentPath);
+      const compressedSize = (outInfo as any).size || compressedBytes.length;
+
+      const savedBytes = Math.max(0, originalSize - compressedSize);
+      const savedPercentage =
+        originalSize > 0 && compressedSize < originalSize
+          ? Math.round((savedBytes / originalSize) * 100)
+          : 0;
+
+      const createdPdf = await pdfRepository.create({
+        id: pdfId,
+        title: `${cleanTitle} (Compressed)`,
+        subjectId,
+        filePath: persistentPath,
+        pageCount: pageIndices.length || 1,
+        fileSize: compressedSize,
+      });
+
+      onProgress?.('Compression complete!', 100, 100);
+
+      return {
+        uri: persistentPath,
+        originalSize,
+        compressedSize,
+        savedPercentage,
+        createdPdf,
+      };
+    } catch (err: any) {
+      console.warn('External PDF compression fallback:', err);
+
+      const tempDest = `${FileSystem.cacheDirectory}${pdfId}.pdf`;
+      await FileSystem.copyAsync({ from: sourceUri, to: tempDest });
+      const persistentPath = await fileService.savePdfFile(tempDest, subjectId, pdfId);
+
+      const outInfo = await FileSystem.getInfoAsync(persistentPath);
+      const actualOut = (outInfo as any).size || originalSize;
+
+      const createdPdf = await pdfRepository.create({
+        id: pdfId,
+        title: `${cleanTitle} (Compressed)`,
+        subjectId,
+        filePath: persistentPath,
+        pageCount: 1,
+        fileSize: actualOut,
+      });
+
+      onProgress?.('Compression complete!', 100, 100);
+
+      return {
+        uri: persistentPath,
+        originalSize,
+        compressedSize: actualOut,
+        savedPercentage: 0,
+        createdPdf,
+      };
+    }
   },
 
   /**
@@ -304,6 +427,7 @@ export const pdfCompressionService = {
 
     const { uri } = await Print.printToFileAsync({ html: htmlContent, base64: false });
     const persistentPath = await fileService.savePdfFile(uri, targetSubjectId, pdfId);
+    await FileSystem.deleteAsync(uri, { idempotent: true });
 
     const outInfo = await FileSystem.getInfoAsync(persistentPath);
     const fileSize = (outInfo as any).size || 0;
@@ -324,4 +448,3 @@ export const pdfCompressionService = {
     };
   },
 };
-

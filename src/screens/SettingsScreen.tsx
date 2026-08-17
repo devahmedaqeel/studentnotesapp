@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Alert, Switch } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, Alert } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
 import { useTheme } from '../hooks/useTheme';
 import { useAuth } from '../hooks/useAuth';
-import { useConnect } from '../hooks/useConnect';
 import { AppHeader } from '../components/common/AppHeader';
 import { AppButton } from '../components/common/AppButton';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,25 +11,21 @@ import { noteRepository } from '../database/repositories/noteRepository';
 import { pdfRepository } from '../database/repositories/pdfRepository';
 import { fileService } from '../services/fileService';
 import { syncService } from '../services/syncService';
-import { privacyService } from '../services/privacyService';
 import { formatFileSize } from '../utils/file';
 import { ThemeMode } from '../types/common';
 import { AVATAR_PRESETS } from '../components/common/AvatarSelector';
-import { STORY_RING_COLORS } from './profile/ProfileSetupScreen';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MainTabs'>;
 
 export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   const { theme, themeMode, setThemeMode, isDark } = useTheme();
-  const { isOffline, profile, user, logout, syncNow, syncing, updateProfile } = useAuth();
-  const { myProfile } = useConnect();
+  const { isOffline, profile, user, logout, syncNow, syncing } = useAuth();
 
   const [noteCount, setNoteCount] = useState(0);
   const [pdfCount, setPdfCount] = useState(0);
   const [usedStorage, setUsedStorage] = useState('0 B');
   const [lastSynced, setLastSynced] = useState<string | null>(null);
   const [refreshingStats, setRefreshingStats] = useState(false);
-  const [hideFollowers, setHideFollowers] = useState(false);
 
   const fetchStats = async () => {
     setRefreshingStats(true);
@@ -44,11 +39,6 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
       setPdfCount(pdfs.length);
       setUsedStorage(formatFileSize(bytes));
       setLastSynced(syncTime ? new Date(syncTime).toLocaleString() : 'Never synced');
-
-      if (user?.id) {
-        const priv = await privacyService.getPrivacySettings(user.id);
-        setHideFollowers(priv.hideFollowersFollowing);
-      }
     } catch (err) {
       console.error('Stats error:', err);
     } finally {
@@ -60,13 +50,6 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
     fetchStats();
   }, [syncing, user?.id]);
 
-  const handleToggleHideFollowers = async (val: boolean) => {
-    setHideFollowers(val);
-    if (user?.id) {
-      await privacyService.updatePrivacySettings(user.id, { hideFollowersFollowing: val });
-    }
-  };
-
   const handleSyncNow = async () => {
     const ok = await syncNow();
     if (ok) {
@@ -75,6 +58,27 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
     } else {
       Alert.alert('Notice', 'Cloud backup completed or no new changes detected.');
     }
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out of your Student Notes account?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            await logout();
+            (navigation.getParent() as any)?.reset({
+              index: 0,
+              routes: [{ name: 'Welcome' }],
+            });
+          },
+        },
+      ]
+    );
   };
 
   const presetData = AVATAR_PRESETS.find((p) => p.id === profile?.avatarPreset) || AVATAR_PRESETS[0];
@@ -91,223 +95,53 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
           </Text>
         </View>
 
-        {/* Profile Card Option with Story Ring */}
+        {/* Profile Card Option */}
         <TouchableOpacity
           activeOpacity={0.85}
           style={[styles.cardItem, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
           onPress={() => (navigation.getParent() as any)?.navigate('Profile')}
         >
           <View style={styles.cardLeft}>
-            <View
-              style={[
-                styles.settingAvatarRing,
-                {
-                  borderColor: profile?.ringColor || '#6366F1',
-                  shadowColor: profile?.ringColor || '#6366F1',
-                },
-              ]}
-            >
-              <View style={styles.settingAvatarInner}>
-                {profile?.avatarUrl ? (
-                  <Image source={{ uri: profile.avatarUrl }} style={styles.avatarImg} resizeMode="cover" />
-                ) : (
-                  <View style={[styles.avatarEmojiBox, { backgroundColor: presetData.bg }]}>
-                    <Text style={styles.avatarEmoji}>{presetData.emoji}</Text>
-                  </View>
-                )}
-              </View>
+            <View style={[styles.settingAvatarInner, { backgroundColor: presetData.bg }]}>
+              {profile?.avatarUrl ? (
+                <Image source={{ uri: profile.avatarUrl }} style={styles.avatarImg} resizeMode="cover" />
+              ) : (
+                <Text style={styles.avatarEmoji}>{presetData.emoji}</Text>
+              )}
             </View>
             <View style={styles.cardTextWrapper}>
               <Text style={[styles.cardTitle, { color: theme.colors.text }]}>
                 {profile?.fullName || 'Student User'}
               </Text>
               <Text style={[styles.cardSubtitle, { color: theme.colors.textSecondary }]}>
-                {myProfile?.username ? `@${myProfile.username}` : 'Create your username'}
+                {profile?.email || (isOffline ? 'Offline Student Mode' : 'Signed in')}
               </Text>
             </View>
           </View>
           <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
         </TouchableOpacity>
 
-        {/* Username Option */}
-        <TouchableOpacity
-          activeOpacity={0.85}
-          style={[
-            styles.cardItem,
-            { backgroundColor: theme.colors.card, borderColor: theme.colors.border, marginTop: 8 },
-          ]}
-          onPress={() => (navigation.getParent() as any)?.navigate('UsernameSettings')}
-        >
-          <View style={styles.cardLeft}>
-            <View
-              style={[
-                styles.settingIconBox,
-                { backgroundColor: isDark ? 'rgba(99, 102, 241, 0.2)' : 'rgba(99, 102, 241, 0.12)' },
-              ]}
-            >
-              <Ionicons name="at-outline" size={16} color={isDark ? '#818CF8' : theme.colors.primary} />
-            </View>
-            <View style={styles.cardTextWrapper}>
-              <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Username</Text>
-              <Text
-                style={[
-                  styles.cardSubtitle,
-                  {
-                    color: myProfile?.username && !myProfile.username.startsWith('student_')
-                      ? (isDark ? '#818CF8' : theme.colors.primary)
-                      : theme.colors.textSecondary,
-                    fontWeight: myProfile?.username && !myProfile.username.startsWith('student_') ? '700' : '400',
-                  },
-                ]}
-              >
-                {myProfile?.username && !myProfile.username.startsWith('student_')
-                  ? `@${myProfile.username}`
-                  : 'Create your unique username'}
-              </Text>
-            </View>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            {myProfile?.username && !myProfile.username.startsWith('student_') ? (
-              <Text style={{ fontSize: 11, fontWeight: '700', color: theme.colors.textSecondary }}>Edit</Text>
-            ) : (
-              <View style={[styles.createPill, { backgroundColor: theme.colors.primary }]}>
-                <Text style={styles.createPillText}>Create</Text>
+        {/* Cloud Backup Card (When Authenticated) */}
+        {!isOffline && (
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={[styles.cardItem, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, marginTop: 8 }]}
+            onPress={handleSyncNow}
+          >
+            <View style={styles.cardLeft}>
+              <View style={[styles.iconBox, { backgroundColor: theme.colors.primaryLight }]}>
+                <Ionicons name="cloud-upload-outline" size={20} color={theme.colors.primary} />
               </View>
-            )}
-            <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
-          </View>
-        </TouchableOpacity>
-
-        {/* Public Student ID Option */}
-        <TouchableOpacity
-          activeOpacity={0.85}
-          style={[
-            styles.cardItem,
-            { backgroundColor: theme.colors.card, borderColor: theme.colors.border, marginTop: 8 },
-          ]}
-          onPress={() => (navigation.getParent() as any)?.navigate('UsernameSettings')}
-        >
-          <View style={styles.cardLeft}>
-            <View
-              style={[
-                styles.settingIconBox,
-                { backgroundColor: isDark ? 'rgba(16, 185, 129, 0.2)' : 'rgba(16, 185, 129, 0.12)' },
-              ]}
-            >
-              <Ionicons name="id-card-outline" size={16} color={isDark ? '#34D399' : '#10B981'} />
+              <View style={styles.cardTextWrapper}>
+                <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Cloud Backup & Sync</Text>
+                <Text style={[styles.cardSubtitle, { color: theme.colors.textSecondary }]}>
+                  Last sync: {lastSynced}
+                </Text>
+              </View>
             </View>
-            <View style={styles.cardTextWrapper}>
-              <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Student ID</Text>
-              <Text style={[styles.cardSubtitle, { color: isDark ? '#34D399' : '#10B981', fontWeight: '700' }]}>
-                {myProfile?.publicStudentId || 'STU-000000'}
-              </Text>
-            </View>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
-        </TouchableOpacity>
-
-        {/* Privacy & Security Section */}
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
-            PRIVACY & SECURITY
-          </Text>
-        </View>
-
-        {/* Hide Followers & Following Switch */}
-        <View
-          style={[
-            styles.cardItem,
-            { backgroundColor: theme.colors.card, borderColor: theme.colors.border, justifyContent: 'space-between' },
-          ]}
-        >
-          <View style={styles.cardLeft}>
-            <View
-              style={[
-                styles.settingIconBox,
-                { backgroundColor: isDark ? 'rgba(99, 102, 241, 0.2)' : 'rgba(99, 102, 241, 0.12)' },
-              ]}
-            >
-              <Ionicons name="eye-off-outline" size={16} color={theme.colors.primary} />
-            </View>
-            <View style={styles.cardTextWrapper}>
-              <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Hide Followers & Following</Text>
-              <Text style={[styles.cardSubtitle, { color: theme.colors.textSecondary }]}>
-                Only you can see your followers and following lists
-              </Text>
-            </View>
-          </View>
-          <Switch
-            value={hideFollowers}
-            onValueChange={handleToggleHideFollowers}
-            trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
-            thumbColor="#FFFFFF"
-          />
-        </View>
-
-        {/* Blocked Students Option */}
-        <TouchableOpacity
-          activeOpacity={0.85}
-          style={[
-            styles.cardItem,
-            { backgroundColor: theme.colors.card, borderColor: theme.colors.border, marginTop: 8 },
-          ]}
-          onPress={() => (navigation.getParent() as any)?.navigate('BlockedStudents')}
-        >
-          <View style={styles.cardLeft}>
-            <View
-              style={[
-                styles.settingIconBox,
-                { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.2)' : 'rgba(239, 68, 68, 0.12)' },
-              ]}
-            >
-              <Ionicons name="ban-outline" size={16} color="#EF4444" />
-            </View>
-            <View style={styles.cardTextWrapper}>
-              <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Blocked Students</Text>
-              <Text style={[styles.cardSubtitle, { color: theme.colors.textSecondary }]}>
-                Manage blocked contacts
-              </Text>
-            </View>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
-        </TouchableOpacity>
-
-        {/* Profile Story Ring Glow Color Selector in Settings */}
-        <View style={[styles.ringColorSettingCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-          <View style={styles.ringColorHeaderRow}>
-            <View style={styles.ringColorHeaderLeft}>
-              <Ionicons name="sparkles" size={18} color={profile?.ringColor || '#6366F1'} style={{ marginRight: 8 }} />
-              <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Profile Story Ring Glow</Text>
-            </View>
-            <View style={[styles.activeColorBadge, { backgroundColor: profile?.ringColor || '#6366F1' }]} />
-          </View>
-          <Text style={[theme.typography.caption, { color: theme.colors.textSecondary, marginTop: 4, marginBottom: 10 }]}>
-            Customize the glowing light color around your top profile avatar:
-          </Text>
-          <View style={styles.colorPaletteRow}>
-            {STORY_RING_COLORS.map((item) => {
-              const isSelected = (profile?.ringColor || '#6366F1') === item.color;
-              return (
-                <TouchableOpacity
-                  key={item.id}
-                  activeOpacity={0.8}
-                  onPress={() => updateProfile({ ringColor: item.color })}
-                  style={[
-                    styles.colorCircleBtn,
-                    {
-                      backgroundColor: item.color,
-                      borderColor: isSelected ? '#FFFFFF' : 'transparent',
-                      shadowColor: item.color,
-                    },
-                    isSelected && styles.colorCircleSelected,
-                  ]}
-                >
-                  {isSelected && <Ionicons name="checkmark" size={13} color="#FFFFFF" />}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
+            <Ionicons name="sync-outline" size={18} color={theme.colors.primary} />
+          </TouchableOpacity>
+        )}
 
         {/* Compression Utility Modules */}
         <View style={styles.sectionHeader}>
@@ -328,7 +162,7 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
             <View style={styles.cardTextWrapper}>
               <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Image Compression Module</Text>
               <Text style={[styles.cardSubtitle, { color: theme.colors.textSecondary }]}>
-                Compress single/multi photos, set resolution & quality
+                Compress photos, adjust resolution & reduce file size
               </Text>
             </View>
           </View>
@@ -500,6 +334,42 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
             <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
           </TouchableOpacity>
         </View>
+
+        {/* Account Actions / Sign Out */}
+        {!isOffline && (
+          <View style={{ marginTop: 24 }}>
+            <AppButton
+              title="Sign Out"
+              onPress={handleLogout}
+              variant="danger"
+              icon="log-out-outline"
+              size="large"
+              accessibilityLabel="Sign out of your account"
+            />
+          </View>
+        )}
+
+        {isOffline && (
+          <View style={{ marginTop: 24 }}>
+            <AppButton
+              title="Sign In / Create Account"
+              onPress={() => {
+                (navigation.getParent() as any)?.navigate('Login');
+              }}
+              variant="outline"
+              icon="log-in-outline"
+              size="large"
+              accessibilityLabel="Sign in or create an account"
+            />
+          </View>
+        )}
+
+        {/* App Version Info */}
+        <View style={{ alignItems: 'center', marginTop: 24, marginBottom: 12 }}>
+          <Text style={[theme.typography.caption, { color: theme.colors.textMuted }]}>
+            Student Notes v1.0.0 • Offline-First Academic Workspace
+          </Text>
+        </View>
       </ScrollView>
     </View>
   );
@@ -518,9 +388,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 14,
     overflow: 'hidden',
-  },
-  cardInnerPadding: {
-    padding: 16,
   },
   cardItem: {
     flexDirection: 'row',
@@ -545,40 +412,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
-  settingAvatarRing: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 2.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.65,
-    shadowRadius: 6,
-    elevation: 4,
-  },
   settingAvatarInner: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 12,
   },
   avatarImg: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-  },
-  avatarEmojiBox: {
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
   },
   avatarEmoji: {
-    fontSize: 20,
+    fontSize: 22,
     textAlign: 'center',
     includeFontPadding: false,
   },
@@ -592,10 +441,6 @@ const styles = StyleSheet.create({
   cardSubtitle: {
     fontSize: 12,
     marginTop: 2,
-  },
-  divider: {
-    height: 1,
-    marginVertical: 12,
   },
   themeRow: {
     flexDirection: 'row',
@@ -613,13 +458,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  statLabel: {
-    fontSize: 13,
-  },
-  statVal: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
   statValueBold: {
     fontSize: 15,
     fontWeight: '700',
@@ -636,64 +474,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     marginLeft: 6,
-  },
-  ringColorSettingCard: {
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    marginTop: 8,
-  },
-  ringColorHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  ringColorHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  activeColorBadge: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-  },
-  colorPaletteRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 2,
-  },
-  colorCircleBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  colorCircleSelected: {
-    borderWidth: 2.5,
-    transform: [{ scale: 1.15 }],
-  },
-  settingIconBox: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  createPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
-  createPillText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '800',
   },
 });

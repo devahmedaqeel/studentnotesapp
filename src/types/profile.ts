@@ -2,7 +2,6 @@ export type StudentStatusType = 'Student' | 'Graduate' | 'Other';
 
 export interface StudentProfile {
   id?: string;
-  username?: string;
   fullName: string;
   email: string;
   department: string;

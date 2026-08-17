@@ -421,38 +421,6 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
           <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
         </TouchableOpacity>
 
-        {/* Student Connect Entry Card */}
-        <TouchableOpacity
-          activeOpacity={0.88}
-          style={[
-            styles.compressCard,
-            {
-              backgroundColor: theme.colors.card,
-              borderColor: theme.colors.border,
-              marginTop: 10,
-            },
-          ]}
-          onPress={() => (navigation.getParent() as any)?.navigate('Inbox')}
-        >
-          <View style={[styles.compressIconBox, { backgroundColor: '#DCFCE7' }]}>
-            <Ionicons name="people" size={24} color="#10B981" />
-          </View>
-          <View style={styles.compressTextWrapper}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={[styles.compressTitle, { color: theme.colors.text }]}>🎓 Student Connect</Text>
-              <View style={[styles.docCountPill, { backgroundColor: 'rgba(16, 185, 129, 0.18)' }]}>
-                <Text style={[styles.docCountPillText, { color: '#10B981' }]}>
-                  Connect
-                </Text>
-              </View>
-            </View>
-            <Text style={[styles.compressSubtitle, { color: theme.colors.textSecondary }]}>
-              Connect with classmates, share 24h updates & grow your student network
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
-        </TouchableOpacity>
-
         {/* Today's Classes Widget */}
         <TodayClassesWidget
           todayClasses={todayClasses}

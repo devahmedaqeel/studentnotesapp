@@ -11,7 +11,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { imageService } from '../../services/imageService';
 import { profileService } from '../../services/profileService';
 import { StudentStatusType } from '../../types/profile';
-import { STORY_RING_COLORS } from './ProfileSetupScreen';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'EditProfile'>;
 
@@ -34,7 +33,6 @@ export const EditProfileScreen: React.FC<Props> = ({ navigation }) => {
   const [department, setDepartment] = useState(profile?.department || '');
   const [graduationYear, setGraduationYear] = useState(profile?.graduationYear || '');
   const [bio, setBio] = useState(profile?.bio || '');
-  const [ringColor, setRingColor] = useState<string>(profile?.ringColor || '#6366F1');
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(profile?.avatarUrl);
   const [loading, setLoading] = useState(false);
 
@@ -78,7 +76,6 @@ export const EditProfileScreen: React.FC<Props> = ({ navigation }) => {
       graduationYear: graduationYear.trim(),
       bio: bio.trim(),
       avatarUrl,
-      ringColor,
       profileCompleted: true,
     });
     setLoading(false);
@@ -90,18 +87,12 @@ export const EditProfileScreen: React.FC<Props> = ({ navigation }) => {
       <AppHeader title="Edit Student Profile" showBack onBack={() => navigation.goBack()} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        {/* Avatar Section with Glowing Story Ring */}
+        {/* Avatar Section */}
         <View style={styles.avatarWrapper}>
           <TouchableOpacity
             onPress={handlePickAvatar}
             activeOpacity={0.8}
-            style={[
-              styles.avatarTouch,
-              {
-                borderColor: ringColor,
-                shadowColor: ringColor,
-              },
-            ]}
+            style={[styles.avatarTouch, { borderColor: theme.colors.primary }]}
           >
             {avatarUrl ? (
               <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
@@ -110,49 +101,13 @@ export const EditProfileScreen: React.FC<Props> = ({ navigation }) => {
                 <Ionicons name="person-outline" size={44} color={theme.colors.primary} />
               </View>
             )}
-            <View style={[styles.cameraBadge, { backgroundColor: ringColor }]}>
+            <View style={[styles.cameraBadge, { backgroundColor: theme.colors.primary }]}>
               <Ionicons name="camera" size={16} color="#FFFFFF" />
             </View>
           </TouchableOpacity>
           <Text style={[theme.typography.caption, { color: theme.colors.textSecondary, marginTop: 8 }]}>
             Tap photo to change
           </Text>
-        </View>
-
-        {/* Profile Story Ring Glow Color Customizer */}
-        <View style={[styles.ringColorContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-          <View style={styles.ringColorHeader}>
-            <Ionicons name="color-palette-outline" size={18} color={ringColor} style={{ marginRight: 6 }} />
-            <Text style={[theme.typography.subtitle2, { color: theme.colors.text }]}>
-              Profile Story Ring Glow Color
-            </Text>
-          </View>
-          <Text style={[theme.typography.caption, { color: theme.colors.textSecondary, marginBottom: 10 }]}>
-            Choose the glowing light color around your avatar:
-          </Text>
-          <View style={styles.colorPaletteRow}>
-            {STORY_RING_COLORS.map((item) => {
-              const isSelected = ringColor === item.color;
-              return (
-                <TouchableOpacity
-                  key={item.id}
-                  activeOpacity={0.8}
-                  onPress={() => setRingColor(item.color)}
-                  style={[
-                    styles.colorCircleBtn,
-                    {
-                      backgroundColor: item.color,
-                      borderColor: isSelected ? '#FFFFFF' : 'transparent',
-                      shadowColor: item.color,
-                    },
-                    isSelected && styles.colorCircleSelected,
-                  ]}
-                >
-                  {isSelected && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
         </View>
 
         <AppInput
@@ -255,21 +210,22 @@ export const EditProfileScreen: React.FC<Props> = ({ navigation }) => {
         />
 
         <AppInput
-          label="Bio / Description"
+          label="Short Bio"
           value={bio}
           onChangeText={setBio}
-          placeholder="Brief student intro..."
+          placeholder="Brief student summary..."
           multiline
           numberOfLines={3}
           leftIcon="document-text-outline"
+          style={{ minHeight: 64 }}
         />
 
         <AppButton
-          title="Save Profile Changes"
+          title="Save Changes"
           onPress={handleSave}
           loading={loading}
           size="large"
-          style={{ marginTop: 16, marginBottom: 40 }}
+          style={{ marginTop: 8, marginBottom: 40 }}
         />
       </ScrollView>
     </View>
@@ -281,74 +237,37 @@ const styles = StyleSheet.create({
   scrollContent: { padding: 20, paddingBottom: 60 },
   avatarWrapper: {
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
   },
   avatarTouch: {
     position: 'relative',
-    borderWidth: 3,
-    borderRadius: 52,
+    borderRadius: 50,
+    borderWidth: 2.5,
     padding: 3,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 8,
-    elevation: 6,
   },
   avatarImage: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 90,
+    height: 90,
+    borderRadius: 45,
   },
   avatarPlaceholder: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 90,
+    height: 90,
+    borderRadius: 45,
     alignItems: 'center',
     justifyContent: 'center',
   },
   cameraBadge: {
     position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    bottom: 2,
+    right: 2,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: '#FFFFFF',
-    elevation: 4,
-  },
-  ringColorContainer: {
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    marginBottom: 16,
-  },
-  ringColorHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  colorPaletteRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 4,
-  },
-  colorCircleBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  colorCircleSelected: {
-    borderWidth: 2.5,
-    transform: [{ scale: 1.15 }],
   },
   statusGroup: {
     marginBottom: 16,

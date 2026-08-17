@@ -7,4 +7,11 @@ export async function runMigrations(db: SQLiteDatabase): Promise<void> {
   
   // Execute table creation and indexes
   await db.execAsync(CREATE_TABLES_SQL);
+
+  // Migration: Add fileSize column to pdfs table (for existing databases)
+  try {
+    await db.execAsync('ALTER TABLE pdfs ADD COLUMN fileSize INTEGER DEFAULT 0;');
+  } catch {
+    // Column already exists — safe to ignore
+  }
 }

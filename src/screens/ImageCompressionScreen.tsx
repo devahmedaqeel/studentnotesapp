@@ -71,12 +71,13 @@ export const ImageCompressionScreen: React.FC<Props> = ({ navigation, route }) =
             height: meta.height,
             format: meta.format,
           });
-        } catch {
+        } catch (err) {
+          console.warn('Image metadata load error:', err);
           loaded.push({
             uri,
-            originalSize: 120.6 * 1024,
-            width: 2000,
-            height: 2000,
+            originalSize: 0,
+            width: 0,
+            height: 0,
             format: 'jpeg',
           });
         }
@@ -129,6 +130,16 @@ export const ImageCompressionScreen: React.FC<Props> = ({ navigation, route }) =
   const totalSavedBytes = Math.max(0, totalOriginalSize - totalEstimatedSize);
   const totalSavedPercentage =
     totalOriginalSize > 0 ? Math.round((totalSavedBytes / totalOriginalSize) * 100) : 0;
+
+  const actualOriginalTotal = compressedResults
+    ? compressedResults.reduce((acc, r) => acc + r.originalSize, 0)
+    : totalOriginalSize;
+  const actualCompressedTotal = compressedResults
+    ? compressedResults.reduce((acc, r) => acc + r.compressedSize, 0)
+    : totalEstimatedSize;
+  const actualSavedBytes = Math.max(0, actualOriginalTotal - actualCompressedTotal);
+  const actualSavedPercentage =
+    actualOriginalTotal > 0 ? Math.round((actualSavedBytes / actualOriginalTotal) * 100) : 0;
 
   const activeItem = estimatedItems.length > 0 ? estimatedItems[activeImageIndex] : null;
 
@@ -414,15 +425,9 @@ export const ImageCompressionScreen: React.FC<Props> = ({ navigation, route }) =
               <Text style={[styles.calcLabel, { color: theme.colors.textSecondary }]}>You Save</Text>
               <Text style={[styles.saveValue, { color: '#059669' }]}>
                 {formatFileSize(
-                  compressedResults
-                    ? Math.max(
-                        0,
-                        compressedResults.reduce((acc, r) => acc + r.originalSize, 0) -
-                          compressedResults.reduce((acc, r) => acc + r.compressedSize, 0)
-                      )
-                    : totalSavedBytes
+                  compressedResults ? actualSavedBytes : totalSavedBytes
                 )}{' '}
-                ({totalSavedPercentage}% reduction)
+                ({compressedResults ? actualSavedPercentage : totalSavedPercentage}% reduction)
               </Text>
             </View>
           </View>

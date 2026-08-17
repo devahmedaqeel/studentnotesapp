@@ -44,18 +44,9 @@ export const TermsAndConditionsScreen: React.FC<Props> = ({ navigation }) => {
             You retain 100% ownership of the notes, documents, PDFs, cropped scans, diary entries, timetable classes, and web links you create or save in the application. You are responsible for ensuring that study materials you upload, scan, or share do not violate university academic integrity policies, copyright laws, or third-party intellectual property rights.
           </Text>
 
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>4. Student Connect & Social Conduct</Text>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>4. Academic Organization & Conduct</Text>
           <Text style={[styles.bodyText, { color: theme.colors.textSecondary }]}>
-            When utilizing Student Connect features (such as Classmate Search, Friend Requests, Follows, and Status Stories), you agree to treat fellow classmates with respect. The following conduct is strictly prohibited:
-          </Text>
-          <Text style={[styles.bulletText, { color: theme.colors.textSecondary }]}>
-            • Harassment, bullying, hate speech, or offensive language.
-          </Text>
-          <Text style={[styles.bulletText, { color: theme.colors.textSecondary }]}>
-            • Impersonating other students or creating deceptive usernames.
-          </Text>
-          <Text style={[styles.bulletText, { color: theme.colors.textSecondary }]}>
-            • Distributing malicious links, spam, or unauthorized examination materials.
+            When utilizing Student Notes productivity tools (such as Note Scanner, Document Vault, Saved Links, Student Diary, and Timetable), you agree to use the platform ethically. Distributing malicious links, spam, or unauthorized examination materials is strictly prohibited.
           </Text>
 
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>5. Offline Data & Cloud Synchronization</Text>
