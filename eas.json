@@ -12,33 +12,11 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      },
-      "env": {
-        "EXPO_PUBLIC_SUPABASE_URL": "https://ymtufelczpyiinlwqhbh.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InltdHVmZWxjenB5aWlubHdxaGJoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2MTcyODMsImV4cCI6MjEwMjE5MzI4M30.XddrPYSr8R0rj-WuG742IIpESxQWHRMwKmQVvo5bbZ0",
-        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyAJfkbdk-TXyorPutYGTfIKoIYsBMRVzj8",
-        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "studentnotes-6a97c.firebaseapp.com",
-        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "studentnotes-6a97c",
-        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "studentnotes-6a97c.firebasestorage.app",
-        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "985785236495",
-        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:985785236495:web:249c32fcac96a792afb77a",
-        "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-4T05VTNLBL"
       }
     },
     "production": {
       "android": {
         "buildType": "apk"
-      },
-      "env": {
-        "EXPO_PUBLIC_SUPABASE_URL": "https://ymtufelczpyiinlwqhbh.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InltdHVmZWxjenB5aWlubHdxaGJoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2MTcyODMsImV4cCI6MjEwMjE5MzI4M30.XddrPYSr8R0rj-WuG742IIpESxQWHRMwKmQVvo5bbZ0",
-        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyAJfkbdk-TXyorPutYGTfIKoIYsBMRVzj8",
-        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "studentnotes-6a97c.firebaseapp.com",
-        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "studentnotes-6a97c",
-        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "studentnotes-6a97c.firebasestorage.app",
-        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "985785236495",
-        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:985785236495:web:249c32fcac96a792afb77a",
-        "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-4T05VTNLBL"
       }
     }
   },

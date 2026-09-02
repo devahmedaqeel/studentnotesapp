@@ -26,7 +26,10 @@ import { notificationService } from './src/services/notificationService';
 import { timetableNotificationService } from './src/services/timetableNotificationService';
 
 const linking = {
-  prefixes: ['studentnotes://', 'https://ymtufelczpyiinlwqhbh.supabase.co'],
+  prefixes: [
+    'studentnotes://',
+    ...(process.env.EXPO_PUBLIC_SUPABASE_URL ? [process.env.EXPO_PUBLIC_SUPABASE_URL] : []),
+  ],
   config: {
     screens: {
       ResetPassword: 'reset-password',

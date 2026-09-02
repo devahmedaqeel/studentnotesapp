@@ -180,18 +180,18 @@ npm start
 ### Environment Variables (`.env`)
 
 ```env
-# Supabase Configuration
-EXPO_PUBLIC_SUPABASE_URL=https://ymtufelczpyiinlwqhbh.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+# Supabase Configuration (Get from Supabase Dashboard -> Settings -> API)
+EXPO_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key-here
 
-# Firebase Configuration
-EXPO_PUBLIC_FIREBASE_API_KEY=AIzaSyAJfkbdk-TXyorPutYGTfIKoIYsBMRVzj8
-EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=studentnotes-6a97c.firebaseapp.com
-EXPO_PUBLIC_FIREBASE_PROJECT_ID=studentnotes-6a97c
-EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=studentnotes-6a97c.firebasestorage.app
-EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=985785236495
-EXPO_PUBLIC_FIREBASE_APP_ID=1:985785236495:web:249c32fcac96a792afb77a
-EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID=G-4T05VTNLBL
+# Firebase Configuration (Get from Firebase Console -> Project Settings)
+EXPO_PUBLIC_FIREBASE_API_KEY=your-firebase-api-key
+EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project-id.firebaseapp.com
+EXPO_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
+EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project-id.firebasestorage.app
+EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your-messaging-sender-id
+EXPO_PUBLIC_FIREBASE_APP_ID=your-firebase-app-id
+EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID=your-measurement-id
 ```
 
 ---
