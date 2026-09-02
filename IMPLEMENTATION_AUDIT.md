@@ -112,9 +112,16 @@ The following operations operate 100% offline without network connectivity or ma
 
 ---
 
-## 10. Files That Should NOT Be Modified Unnecessarily
+## 11. Production APK & EAS Build Readiness Audit
 
-- SQLite Database Schema & Migrations (`src/database/schema.ts`, `database.ts`)
-- Camera & Image Processing logic (`src/services/cameraService.ts`, `imageService.ts`)
-- PDF Generation engine (`src/services/pdfService.ts`)
-- Unit Test Specs (`__tests__/utils.test.ts`)
+**Audit Date**: September 3, 2026  
+**Target Build Engine**: Expo Application Services (EAS Build)  
+**EAS Project ID**: `26b9a18b-db4f-4ee8-8e48-dc2cba7509a4` (`@engraqeels-team`)
+
+### Resolved Issues & Optimizations
+1. **Asset Type Alignment**: Converted `assets/icon.png`, `assets/adaptive-icon.png`, and `assets/splash.png` from JPEG to standard PNG format, passing Expo CLI schema validations.
+2. **Dependency Harmonization**: Removed extraneous `@types/react-native` package to resolve typing conflicts with React Native 0.81.5; aligned patch dependencies (`expo@~54.0.37`, `expo-constants@~18.0.14`, `expo-file-system@~19.0.24`, `jest-expo@~54.0.18`).
+3. **Android Prebuild Synchronization**: Generated clean Android native files with `npx expo prebuild`, automatically injecting notification, storage, and alarm permissions into `AndroidManifest.xml`.
+4. **Cloud Build Secrets**: Exported both Supabase and Firebase configuration variables into `eas.json` for seamless `preview` and `production` APK cloud builds.
+5. **Quality Assurance**: Verified 0 TypeScript errors with `tsc --noEmit`, successful JS Hermes bundling with `expo export`, and 100% test pass rate across all 9 Jest test suites.
+

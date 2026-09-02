@@ -2,60 +2,79 @@
 
 ## 1. System Overview
 
-StudentNotes is an **offline-first**, modern student productivity and academic networking application built using **React Native (Expo SDK 54)**, **TypeScript**, **SQLite**, and **Supabase Cloud**.
+StudentNotes is an **offline-first**, production-ready student productivity, document management, and academic scheduling application built using **React Native (0.81.5)**, **Expo SDK 54**, **TypeScript**, **SQLite**, **Supabase Cloud**, and **Firebase**.
 
 ```
-                      StudentNotes Application
-                                 │
-             ┌───────────────────┴───────────────────┐
-             ▼                                       ▼
-       OFFLINE MODE                          AUTHENTICATED MODE
-     (Default / Guest)                        (Supabase Session)
-             │                                       │
-    SQLite + Local Files                    SQLite + Cloud Sync
-  (No internet connection)                 (PostgreSQL + Storage)
-             │                                       │
-             └───────────────────┬───────────────────┘
-                                 ▼
-                        Sync & Backup Engine
-                    (Account-Isolated Merging)
+                           StudentNotes Application
+                                      │
+              ┌───────────────────────┴───────────────────────┐
+              ▼                                               ▼
+        OFFLINE MODE                                 AUTHENTICATED MODE
+      (Default / Guest)                        (Firebase Auth / Supabase Session)
+              │                                               │
+     SQLite + Local Files                            SQLite + Cloud Sync
+   (No internet connection)                 (PostgreSQL RLS + Firebase Firestore)
+              │                                               │
+              └───────────────────────┬───────────────────────┘
+                                      ▼
+                             Sync & Backup Engine
+                          (Account-Isolated Merging)
+                                      │
+                                      ▼
+                        Expo Application Services (EAS)
+                         (Continuous Cloud APK Builds)
 ```
 
 ---
 
 ## 2. Architecture Layers
 
-To ensure modularity and scalability, the application adheres strictly to a clean 5-layer pattern:
+The application adheres strictly to a clean 5-layer separation of concerns pattern:
 
-`UI Views & Components` -> `React Custom Hooks` -> `Services Layer` -> `Repositories` -> `SQLite Local DB / Supabase Cloud`
+`UI Views & Components` ➔ `React Custom Hooks` ➔ `Services Layer` ➔ `Repositories` ➔ `SQLite Local DB / Cloud Sync`
 
-1. **Screens / Components**:
-   - **Academic Suite**: `HomeScreen`, `ScannerScreen`, `ScanPreviewScreen`, `SaveNoteScreen`, `NoteViewerScreen`, `CreatePdfScreen`, `PdfViewerScreen`, `DocumentVaultScreen`, `StudentDiaryScreen`, `TimetableScreen`, `SavedLinksScreen`, `SaveLinkScreen`.
-   - **Student Connect**: `InboxScreen` (Updates, Requests, Friends), `StudentProfileScreen`, `StudentSearchScreen`, `CreateStatusModal`.
-   - **Common & Layout**: `AppHeader`, `AppButton`, `AppInput`, `ImageCropModal`, `ResourceCard`.
-2. **Custom Hooks**:
-   - `useAuth`, `useTheme`, `useSubjects`, `useNotes`, `usePdfs`, `useConnect`.
-3. **Services**:
-   - `syncService`, `connectService`, `linkService`, `statusService`, `presenceService`, `notificationService`, `imageService`, `pdfService`, `fileService`.
-4. **Repositories**:
-   - `subjectRepository`, `folderRepository`, `noteRepository`, `pdfRepository`, `savedLinkRepository`, `documentRepository`, `diaryRepository`, `timetableRepository`, `trashRepository`.
-5. **Data Layer**:
-   - Local SQLite database (`student_notes.db`) & Supabase PostgreSQL with strict Row-Level Security (`auth.uid() = user_id`).
+### 1. Presentation & Screens
+* **Academic Suite**: `HomeScreen`, `ScannerScreen`, `DocumentCropScreen`, `SaveNoteScreen`, `NoteViewerScreen`, `CreatePdfScreen`, `PdfViewerScreen`, `DocumentVaultScreen`, `StudentDiaryScreen`, `TimetableScreen`, `SavedLinksScreen`, `SaveLinkScreen`, `ImageCompressionScreen`, `PdfCompressionScreen`.
+* **Student Connect**: `InboxScreen` (Updates, Requests, Friends), `StudentProfileScreen`, `StudentSearchScreen`, `CreateStatusModal`.
+* **Universal Common**: `AppHeader`, `AppButton`, `AppInput`, `AppDatePicker`, `AppTimePicker`, `SwipeableRow`, `BottomSheet`, `ConfirmDialog`.
+
+### 2. Custom Hooks
+* `useAuth`, `useTheme`, `useSubjects`, `useNotes`, `usePdfs`, `useDocuments`, `useDiary`, `useTimetable`, `useConnect`.
+
+### 3. Services Layer
+* `authService`: Manages hybrid Firebase & Supabase authentication, session persistence, and guest modes.
+* `localAccountService`: Isolated offline credential management and token caching.
+* `syncService`: Bidirectional synchronization between SQLite and remote cloud backends.
+* `linkService`: Smart URL cleaning, tracker removal, and automatic metadata scraping.
+* `imageCompressionService`: High-ratio photo compression and gallery export.
+* `pdfCompressionService` & `pdfCreationService`: Multi-page document compilation and size optimization.
+* `notificationService`: Local scheduled reminders for class timetables and assignment deadlines.
+
+### 4. Repositories (Data Access Objects)
+* `subjectRepository`, `folderRepository`, `noteRepository`, `pdfRepository`, `savedLinkRepository`, `documentRepository`, `diaryRepository`, `timetableRepository`, `trashRepository`.
+
+### 5. Data & Storage Layer
+* **Local SQLite**: `student_notes.db` executed through `expo-sqlite`.
+* **Device Storage**: Sandboxed file system via `expo-file-system`.
+* **Cloud Persistence**: Supabase PostgreSQL with strict Row-Level Security (`auth.uid() = user_id`) and Firebase Firestore / Storage.
 
 ---
 
 ## 3. Key Architectural Pillars
 
-### Offline-First Guarantee
-All user data creation, editing, scanning, PDF generation, timetable scheduling, diary tracking, and link saving execute immediately against local SQLite and device storage (`app-storage/`). No active internet connection is required for day-to-day academic workflows.
+### 1. Offline-First Guarantee
+All document creation, note editing, camera scanning, crop manipulations, timetable viewing, and diary tasks run immediately on device without latency or network dependency.
 
-### Smart URL Optimization Engine
-When saving academic research links, `linkService` parses input URLs, identifies and strips known tracking/advertising parameters (`utm_*`, `fbclid`, `gclid`, `msclkid`, `si`, etc.), while strictly preserving critical query parameters (`id`, `page`, `v`, `t`, `search`, `doc`) to ensure the target destination continues to function seamlessly.
+### 2. Smart URL Optimization Engine
+When saving web links, `linkService` dynamically removes invasive marketing parameters (`utm_*`, `fbclid`, `gclid`, `msclkid`, `si`, `spm`) while preserving operational parameters (`id`, `v`, `t`, `page`, `search`, `doc`).
 
-### Multi-Account Data Isolation
-- Primary identity is anchored to Supabase `auth.uid()` (UUID).
-- On logout, local SQLite caches are purged to prevent cross-account leakage.
-- On login, cloud data matching `auth.uid()` is downloaded and restored into SQLite.
+### 3. Multi-Account Data Isolation
+* Primary identity is anchored to authenticated UUIDs.
+* When logging out, local SQLite tables and caches are cleaned to prevent information leakage across accounts.
+* When logging into a new or existing account, cloud data matching that user ID is fetched and restored.
 
-### 4-Corner Quadrilateral Document Scanner
-The camera scanning engine captures lecture notes and slides, providing interactive 4-corner boundary adjustment, perspective correction, image compression, and PDF compilation offline.
+### 4. Standalone APK Cloud Build Pipeline (EAS)
+The application leverages Expo Application Services (EAS Build) with Continuous Native Generation (CNG):
+* Configured under EAS Project ID: `26b9a18b-db4f-4ee8-8e48-dc2cba7509a4`.
+* Builds standalone Android APKs (`preview` and `production` profiles) with Hermes bytecode optimization.
+* Automated NDK versioning (27.0.12077973) and Android Gradle memory optimization (4096m JVM).

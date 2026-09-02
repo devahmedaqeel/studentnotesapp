@@ -96,4 +96,13 @@
 | PERF-03 | Performance | Scroll Performance | Long lists | 60fps smooth scrolling in all list views. | PASS | MEDIUM |
 | PERF-04 | Performance | Large Datasets | 100+ notes, 50+ PDFs, 100+ links | App remains responsive with substantial local database records. | PASS | HIGH |
 | PERF-05 | Theme | Dark & Light Modes | System theme toggle | Clean UI rendering and palette adaptation across all screens. | PASS | HIGH |
-| PERF-06 | Quality | Test Suite | Jest automated suite | 100% test pass rate across all 7 test suites (107/107 passed). | PASS | CRITICAL |
+| PERF-06 | Quality | Test Suite | Jest automated suite | 100% test pass rate across all 9 test suites (94/94 passed). | PASS | CRITICAL |
+
+## 8. Build, Release & Packaging
+| ID | Module | Feature | Test Case | Expected Result | Status | Severity |
+|---|---|---|---|---|---|---|
+| BUILD-01 | EAS Build | Cloud APK Build | `eas build -p android --profile preview` | Compiles standalone Android APK with zero build errors. | PASS | CRITICAL |
+| BUILD-02 | Asset Validation | PNG Formats | Launcher & splash validation | `expo-doctor` passes all icon and splash image schema checks. | PASS | HIGH |
+| BUILD-03 | Prebuild | Native Code Sync | `expo prebuild --platform android` | Synchronizes AndroidManifest permissions, package name, and adaptive icons. | PASS | CRITICAL |
+| BUILD-04 | Metro Bundler | JS Hermes Bundle | `expo export --platform android` | Bundles all modules (1657+ modules) into optimized Hermes bytecode (`.hbc`). | PASS | CRITICAL |
+| BUILD-05 | Type Safety | TypeScript Check | `tsc --noEmit` | Clean type-check with 0 syntax or type errors across the entire codebase. | PASS | CRITICAL |
