@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import {
   Modal,
   View,
@@ -7,6 +7,8 @@ import {
   StyleSheet,
   TouchableWithoutFeedback,
   ScrollView,
+  Animated,
+  PanResponder,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
@@ -33,23 +35,56 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   onClose,
 }) => {
   const { theme } = useTheme();
+  const translateY = useRef(new Animated.Value(0)).current;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => gestureState.dy > 5,
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy > 0) {
+          translateY.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dy > 70) {
+          Animated.timing(translateY, {
+            toValue: 350,
+            duration: 150,
+            useNativeDriver: true,
+          }).start(() => {
+            translateY.setValue(0);
+            onClose();
+          });
+        } else {
+          Animated.spring(translateY, {
+            toValue: 0,
+            useNativeDriver: true,
+            bounciness: 6,
+          }).start();
+        }
+      },
+    })
+  ).current;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={[styles.overlay, { backgroundColor: theme.colors.overlay }]}>
           <TouchableWithoutFeedback>
-            <View
+            <Animated.View
               style={[
                 styles.sheet,
                 {
                   backgroundColor: theme.colors.card,
                   borderTopLeftRadius: theme.radius.xl,
                   borderTopRightRadius: theme.radius.xl,
+                  transform: [{ translateY }],
                 },
               ]}
             >
-              <View style={styles.handleContainer}>
+              {/* Drag Handle with Downward Swipe Gesture */}
+              <View style={styles.handleContainer} {...panResponder.panHandlers}>
                 <View style={[styles.handle, { backgroundColor: theme.colors.border }]} />
               </View>
 
@@ -88,7 +123,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                   </TouchableOpacity>
                 ))}
               </ScrollView>
-            </View>
+            </Animated.View>
           </TouchableWithoutFeedback>
         </View>
       </TouchableWithoutFeedback>
@@ -107,12 +142,12 @@ const styles = StyleSheet.create({
   },
   handleContainer: {
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: 12,
   },
   handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
+    width: 40,
+    height: 5,
+    borderRadius: 3,
   },
   optionsList: {
     maxHeight: 320,

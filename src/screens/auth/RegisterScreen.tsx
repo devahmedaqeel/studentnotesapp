@@ -22,7 +22,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Register'>;
 
 export const RegisterScreen: React.FC<Props> = ({ navigation }) => {
   const { theme, isDark } = useTheme();
-  const { registerWithEmail, loginWithGoogle } = useAuth();
+  const { registerWithEmail, loginWithGoogle, isProfileComplete } = useAuth();
   const { checkConnection } = useNetwork();
 
   const [fullName, setFullName] = useState('');
@@ -87,20 +87,18 @@ export const RegisterScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleGoogleSignup = async () => {
     setErrorMsg(null);
-    const online = await checkConnection();
-    if (!online) {
-      setErrorMsg('Internet connection required for Google sign up.');
-      return;
-    }
-
     setGoogleLoading(true);
     try {
       const res = await loginWithGoogle();
       setGoogleLoading(false);
-      if (!res.success) {
-        if (res.error && !res.error.toLowerCase().includes('cancel')) {
-          setErrorMsg(res.error);
+      if (res.success) {
+        if (isProfileComplete) {
+          navigation.replace('MainTabs', { screen: 'Home' });
+        } else {
+          navigation.replace('ProfileSetup', { isEditing: false });
         }
+      } else if (res.error && !res.error.toLowerCase().includes('cancel')) {
+        setErrorMsg(res.error);
       }
     } catch (e: any) {
       setGoogleLoading(false);
@@ -111,7 +109,7 @@ export const RegisterScreen: React.FC<Props> = ({ navigation }) => {
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: theme.colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
     >
       <AppHeader title="Create Account" showBack onBack={() => navigation.goBack()} />
@@ -119,6 +117,7 @@ export const RegisterScreen: React.FC<Props> = ({ navigation }) => {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.headerBox}>
@@ -226,7 +225,7 @@ export const RegisterScreen: React.FC<Props> = ({ navigation }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scrollContent: { padding: 20, paddingBottom: 40 },
+  scrollContent: { padding: 20, paddingBottom: 160 },
   headerBox: { marginBottom: 20 },
   errorBox: {
     flexDirection: 'row',

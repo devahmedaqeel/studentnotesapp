@@ -1,7 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Print from 'expo-print';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, PDFRawStream, PDFName, PDFNumber } from 'pdf-lib';
 import { fileService } from './fileService';
 import { imageCompressionService } from './imageCompressionService';
 import { pdfRepository } from '../database/repositories/pdfRepository';
@@ -83,6 +83,97 @@ export const pdfCompressionService = {
   },
 
   /**
+   * Scans all indirect objects in a PDFDocument for embedded image streams (e.g. DCTDecode JPEG),
+   * extracts each image, recompresses and downsamples it with Expo ImageManipulator according
+   * to target quality, and replaces the raw stream with the smaller compressed image.
+   */
+  async optimizeEmbeddedPdfImages(
+    pdfDoc: PDFDocument,
+    quality: number,
+    onProgress?: (statusMsg: string, current: number, total: number) => void
+  ): Promise<{ imagesFound: number; imagesCompressed: number; bytesSaved: number }> {
+    let imagesFound = 0;
+    let imagesCompressed = 0;
+    let bytesSaved = 0;
+
+    const indirectObjects = pdfDoc.context.enumerateIndirectObjects();
+    const imageObjects: { ref: any; obj: PDFRawStream }[] = [];
+
+    for (const [ref, obj] of indirectObjects) {
+      if (obj instanceof PDFRawStream) {
+        const subtype = obj.dict.get(PDFName.of('Subtype'));
+        if (subtype?.toString() === '/Image') {
+          imageObjects.push({ ref, obj });
+        }
+      }
+    }
+
+    imagesFound = imageObjects.length;
+    if (imagesFound === 0) {
+      return { imagesFound: 0, imagesCompressed: 0, bytesSaved: 0 };
+    }
+
+    const targetMaxRes =
+      quality <= 0.35 ? 1080 : quality <= 0.60 ? 1440 : quality <= 0.80 ? 1800 : 2200;
+
+    for (let i = 0; i < imageObjects.length; i++) {
+      onProgress?.(
+        `Optimizing embedded image ${i + 1} of ${imageObjects.length}...`,
+        40 + Math.round(((i + 1) / imageObjects.length) * 45),
+        100
+      );
+      const { obj } = imageObjects[i];
+      const origStreamBytes = obj.contents;
+      if (!origStreamBytes || origStreamBytes.length < 5120) continue; // Skip tiny icons
+
+      const filter = obj.dict.get(PDFName.of('Filter'))?.toString();
+      const isJpeg = filter === '/DCTDecode';
+
+      // We process JPEG streams natively with hardware-accelerated Expo ImageManipulator
+      if (isJpeg && origStreamBytes.length > 8192) {
+        const tempPath = `${FileSystem.cacheDirectory}pdf_stream_${Date.now()}_${i}.jpg`;
+        try {
+          const b64 = uint8ArrayToBase64(origStreamBytes);
+          await FileSystem.writeAsStringAsync(tempPath, b64, { encoding: 'base64' as any });
+
+          const comp = await imageCompressionService.compressImage(tempPath, {
+            preset: 'custom',
+            quality,
+            maxResolution: targetMaxRes,
+            format: 'jpeg',
+            preserveAspectRatio: true,
+          });
+
+          if (comp.compressedSize < origStreamBytes.length) {
+            const compB64 = await FileSystem.readAsStringAsync(comp.uri, { encoding: 'base64' as any });
+            const compBytes = base64ToUint8Array(compB64);
+
+            if (compBytes.length < origStreamBytes.length) {
+              const diff = origStreamBytes.length - compBytes.length;
+              bytesSaved += diff;
+              (obj as any).contents = compBytes;
+              obj.dict.set(PDFName.of('Length'), PDFNumber.of(compBytes.length));
+              obj.dict.set(PDFName.of('Filter'), PDFName.of('DCTDecode'));
+              if (comp.width) obj.dict.set(PDFName.of('Width'), PDFNumber.of(comp.width));
+              if (comp.height) obj.dict.set(PDFName.of('Height'), PDFNumber.of(comp.height));
+              imagesCompressed++;
+            }
+          }
+
+          await imageCompressionService.cleanupTempFiles([tempPath, comp.uri]);
+        } catch (e) {
+          console.warn(`Could not compress PDF embedded image ${i}:`, e);
+          try {
+            await FileSystem.deleteAsync(tempPath, { idempotent: true });
+          } catch {}
+        }
+      }
+    }
+
+    return { imagesFound, imagesCompressed, bytesSaved };
+  },
+
+  /**
    * Compresses an existing in-app PDF document by re-processing its pages.
    */
   async compressPdf(
@@ -96,8 +187,9 @@ export const pdfCompressionService = {
 
     // Check if there are corresponding note pages or image sources for this PDF
     const allNotes = await noteRepository.getAll();
+    const cleanTitle = pdf.title.replace(/\s*\(Compressed\)\s*/gi, '').trim().toLowerCase();
     const matchingNote = allNotes.find(
-      (n) => n.title.toLowerCase() === pdf.title.toLowerCase() || n.id === pdf.id
+      (n) => n.title.trim().toLowerCase() === cleanTitle || n.id === pdf.id
     );
 
     let pageImages: string[] = [];
@@ -194,8 +286,8 @@ export const pdfCompressionService = {
       };
     }
 
-    // 2. For external or generic PDFs, use pdf-lib structure optimization and object stream compression
-    onProgress?.('Analyzing and optimizing PDF structure...', 30, 100);
+    // 2. For external or generic PDFs, use deep embedded image re-encoding + object stream compression
+    onProgress?.('Analyzing and optimizing PDF document...', 25, 100);
     try {
       const base64Content = await FileSystem.readAsStringAsync(pdf.filePath, {
         encoding: 'base64' as any,
@@ -203,16 +295,24 @@ export const pdfCompressionService = {
       const pdfBytes = base64ToUint8Array(base64Content);
 
       const srcDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
-      const newDoc = await PDFDocument.create();
 
-      const pageIndices = srcDoc.getPageIndices();
-      const copiedPages = await newDoc.copyPages(srcDoc, pageIndices);
-      for (const page of copiedPages) {
-        newDoc.addPage(page);
+      if (typeof srcDoc.context?.enumerateIndirectObjects === 'function') {
+        await this.optimizeEmbeddedPdfImages(srcDoc, quality, onProgress);
       }
 
-      onProgress?.('Compressing cross-reference object streams...', 70, 100);
-      const compressedBytes = await newDoc.save({ useObjectStreams: true });
+      const newDoc = await PDFDocument.create();
+      const pageIndices = srcDoc.getPageIndices?.() || (srcDoc.getPageCount ? Array.from({ length: srcDoc.getPageCount() }, (_, i) => i) : []);
+      if (pageIndices.length > 0 && newDoc.copyPages) {
+        const copiedPages = await newDoc.copyPages(srcDoc, pageIndices);
+        for (const page of copiedPages) {
+          newDoc.addPage(page);
+        }
+      }
+
+      onProgress?.('Compressing cross-reference object streams...', 85, 100);
+      const compressedBytes = newDoc.save
+        ? await newDoc.save({ useObjectStreams: true })
+        : await srcDoc.save({ useObjectStreams: true });
       const compressedBase64 = uint8ArrayToBase64(compressedBytes);
 
       const tempDest = `${FileSystem.cacheDirectory}${compressedPdfId}.pdf`;
@@ -226,7 +326,6 @@ export const pdfCompressionService = {
       const outInfo = await FileSystem.getInfoAsync(persistentPath);
       let compressedSize = (outInfo as any).size || compressedBytes.length;
 
-      // If object streams didn't reduce size (already compressed), keep actual measured size
       const savedBytes = Math.max(0, originalSize - compressedSize);
       const savedPercentage =
         originalSize > 0 && compressedSize < originalSize
@@ -239,7 +338,10 @@ export const pdfCompressionService = {
         subjectId: targetSubjectId,
         folderId: pdf.folderId,
         filePath: persistentPath,
-        pageCount: pageIndices.length || pdf.pageCount || 1,
+        pageCount:
+          (typeof srcDoc.getPageCount === 'function' ? srcDoc.getPageCount() : pageIndices.length) ||
+          pdf.pageCount ||
+          1,
         fileSize: compressedSize,
       });
 
@@ -292,11 +394,12 @@ export const pdfCompressionService = {
     const origInfo = await FileSystem.getInfoAsync(sourceUri);
     const originalSize = (origInfo as any).size || 0;
 
-    onProgress?.('Importing and analyzing PDF document...', 20, 100);
+    onProgress?.('Importing and analyzing PDF document...', 15, 100);
 
     const subjectId = await this.getValidSubjectId();
     const pdfId = generateId('pdf_ext');
     const cleanTitle = title.replace(/\.pdf$/i, '').trim();
+    const quality = Math.max(0.1, Math.min(0.95, config.quality || 0.5));
 
     try {
       const base64Content = await FileSystem.readAsStringAsync(sourceUri, {
@@ -304,18 +407,25 @@ export const pdfCompressionService = {
       });
       const pdfBytes = base64ToUint8Array(base64Content);
 
-      onProgress?.('Rebuilding PDF with object stream compression...', 50, 100);
       const srcDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
-      const newDoc = await PDFDocument.create();
 
-      const pageIndices = srcDoc.getPageIndices();
-      const copiedPages = await newDoc.copyPages(srcDoc, pageIndices);
-      for (const page of copiedPages) {
-        newDoc.addPage(page);
+      if (typeof srcDoc.context?.enumerateIndirectObjects === 'function') {
+        await this.optimizeEmbeddedPdfImages(srcDoc, quality, onProgress);
       }
 
-      onProgress?.('Compressing and finalizing output...', 80, 100);
-      const compressedBytes = await newDoc.save({ useObjectStreams: true });
+      const newDoc = await PDFDocument.create();
+      const pageIndices = srcDoc.getPageIndices?.() || (srcDoc.getPageCount ? Array.from({ length: srcDoc.getPageCount() }, (_, i) => i) : []);
+      if (pageIndices.length > 0 && newDoc.copyPages) {
+        const copiedPages = await newDoc.copyPages(srcDoc, pageIndices);
+        for (const page of copiedPages) {
+          newDoc.addPage(page);
+        }
+      }
+
+      onProgress?.('Rebuilding PDF with object stream compression...', 85, 100);
+      const compressedBytes = newDoc.save
+        ? await newDoc.save({ useObjectStreams: true })
+        : await srcDoc.save({ useObjectStreams: true });
       const compressedBase64 = uint8ArrayToBase64(compressedBytes);
 
       const tempDest = `${FileSystem.cacheDirectory}${pdfId}.pdf`;
@@ -340,7 +450,8 @@ export const pdfCompressionService = {
         title: `${cleanTitle} (Compressed)`,
         subjectId,
         filePath: persistentPath,
-        pageCount: pageIndices.length || 1,
+        pageCount:
+          (typeof srcDoc.getPageCount === 'function' ? srcDoc.getPageCount() : pageIndices.length) || 1,
         fileSize: compressedSize,
       });
 

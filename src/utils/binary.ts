@@ -102,7 +102,7 @@ export function uint8ArrayToBase64(uint8: Uint8Array | number[]): string {
 }
 
 /**
- * Converts Base64 to ArrayBuffer for Supabase Storage uploads.
+ * Converts Base64 to ArrayBuffer for binary/storage operations.
  */
 export function base64ToArrayBuffer(base64: string): ArrayBuffer {
   return base64ToUint8Array(base64).buffer as ArrayBuffer;

@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
 import { SavedLink } from '../../types/savedLink';
 import { RESOURCE_TYPE_CONFIGS } from '../../services/linkService';
+import { SwipeableRow } from '../common/SwipeableRow';
 
 interface ResourceCardProps {
   link: SavedLink;
@@ -75,7 +76,7 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
     }
   };
 
-  return (
+  const cardContent = (
     <TouchableOpacity
       activeOpacity={0.9}
       onPress={handleOpenLink}
@@ -231,6 +232,20 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
       </View>
     </TouchableOpacity>
   );
+
+  if (onDelete || onToggleFavorite) {
+    return (
+      <SwipeableRow
+        onDelete={onDelete}
+        onFavoriteToggle={onToggleFavorite}
+        isFavorite={link.favorite}
+      >
+        {cardContent}
+      </SwipeableRow>
+    );
+  }
+
+  return cardContent;
 };
 
 const styles = StyleSheet.create({

@@ -85,10 +85,6 @@ export const useDiary = (initialDate?: string) => {
     }, [fetchStats, fetchEvents])
   );
 
-  useEffect(() => {
-    fetchEvents();
-  }, [fetchEvents]);
-
   const onRefresh = async () => {
     setRefreshing(true);
     await Promise.all([fetchStats(), fetchEvents()]);

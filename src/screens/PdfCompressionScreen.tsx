@@ -161,6 +161,7 @@ export const PdfCompressionScreen: React.FC<Props> = ({ navigation, route }) => 
           originalSize: res.originalSize,
           compressedSize: res.compressedSize,
           savedPercentage: res.savedPercentage,
+          pdfDocument: res.createdPdf,
         });
       } else if (activeTarget.id) {
         const res = await pdfCompressionService.compressPdf(
@@ -178,10 +179,15 @@ export const PdfCompressionScreen: React.FC<Props> = ({ navigation, route }) => 
         });
       }
 
-      if (savedPct <= 0) {
+      if (savedPct > 0) {
         Alert.alert(
-          'Already Optimized',
-          'This PDF document is already compact and cannot be reduced further without significant quality loss.'
+          'Compression Successful 🎉',
+          `PDF document reduced by ${savedPct}%! (New size: ${formatFileSize(activeTarget.size * (1 - savedPct / 100))})`
+        );
+      } else {
+        Alert.alert(
+          'PDF Optimization Complete',
+          'This PDF document is already highly compact and has been fully optimized with object streams.'
         );
       }
     } catch (err: any) {

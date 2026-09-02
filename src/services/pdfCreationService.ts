@@ -6,7 +6,8 @@ import { pdfRepository } from '../database/repositories/pdfRepository';
 import { PdfDocument } from '../types/pdf';
 import { PdfCompressionConfig, CompressionPreset } from '../types/compression';
 import { generateId } from '../utils/id';
-import { supabase } from './supabase';
+import { db } from './firebase';
+import { doc, setDoc } from 'firebase/firestore';
 import { storageService } from './storageService';
 
 export const DEFAULT_PDF_PRESETS: Record<Exclude<CompressionPreset, 'custom'>, PdfCompressionConfig> = {
@@ -212,20 +213,23 @@ export const pdfCreationService = {
 
         const remotePathOrLocal = cloudStoragePath || createdPdf.filePath;
 
-        await supabase.from('pdfs').upsert({
-          id: createdPdf.id,
-          user_id: userId,
-          subject_id: createdPdf.subjectId,
-          folder_id: createdPdf.folderId || null,
-          title: createdPdf.title,
-          file_path: remotePathOrLocal,
-          file_url: remotePathOrLocal,
-          page_count: createdPdf.pageCount,
-          file_size_bytes: createdPdf.fileSize || 0,
-          is_favorite: createdPdf.favorite,
-          created_at: createdPdf.createdAt,
-          updated_at: createdPdf.updatedAt,
-        });
+        await setDoc(
+          doc(db, 'pdfs', createdPdf.id),
+          {
+            id: createdPdf.id,
+            userId,
+            subjectId: createdPdf.subjectId,
+            folderId: createdPdf.folderId || null,
+            title: createdPdf.title,
+            filePath: remotePathOrLocal,
+            pageCount: createdPdf.pageCount,
+            fileSize: createdPdf.fileSize || 0,
+            favorite: Boolean(createdPdf.favorite),
+            createdAt: createdPdf.createdAt,
+            updatedAt: createdPdf.updatedAt,
+          },
+          { merge: true }
+        );
       } catch (e) {
         console.warn('PDF cloud sync warning:', e);
       }

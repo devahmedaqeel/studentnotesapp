@@ -296,8 +296,10 @@ export const SaveLinkScreen: React.FC<Props> = ({ navigation, route }) => {
         <ScrollView
           contentContainerStyle={[
             styles.scrollContent,
-            { paddingBottom: Math.max(insets.bottom, 20) + 40 },
+            { paddingBottom: Math.max(insets.bottom, 20) + 160 },
           ]}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
         >
           {/* 1. Paste Link Card */}

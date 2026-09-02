@@ -41,6 +41,33 @@ export const TrashScreen: React.FC<Props> = ({ navigation }) => {
     fetchTrash();
   }, []);
 
+  const ensureValidSubjectAndFolder = async (subjectId?: string, folderId?: string | null) => {
+    const allSubjects = await subjectRepository.getAll();
+    let validSubjectId = subjectId;
+    if (!validSubjectId || !allSubjects.some((s) => s.id === validSubjectId)) {
+      if (allSubjects.length > 0) {
+        validSubjectId = allSubjects[0].id;
+      } else {
+        const fallback = await subjectRepository.create({
+          name: 'General Notes',
+          icon: 'book-outline',
+          color: '#4F46E5',
+        });
+        validSubjectId = fallback.id;
+      }
+    }
+
+    let validFolderId: string | null = folderId || null;
+    if (validFolderId) {
+      const folderExists = await folderRepository.getById(validFolderId);
+      if (!folderExists || folderExists.subjectId !== validSubjectId) {
+        validFolderId = null;
+      }
+    }
+
+    return { validSubjectId, validFolderId };
+  };
+
   const handleRestore = async (item: TrashItem) => {
     try {
       const metadata = JSON.parse(item.metadata);
@@ -50,11 +77,15 @@ export const TrashScreen: React.FC<Props> = ({ navigation }) => {
         if (item.originalPath) {
           await fileService.restoreFromTrash(trashedPath, item.originalPath);
         }
+        const { validSubjectId, validFolderId } = await ensureValidSubjectAndFolder(
+          metadata.subjectId,
+          metadata.folderId
+        );
         await noteRepository.create(
           {
             title: metadata.title,
-            subjectId: metadata.subjectId,
-            folderId: metadata.folderId,
+            subjectId: validSubjectId,
+            folderId: validFolderId,
             pageFilePaths: (metadata.pages || []).map((p: any) => p.filePath),
           },
           metadata.id
@@ -64,11 +95,15 @@ export const TrashScreen: React.FC<Props> = ({ navigation }) => {
         if (item.originalPath) {
           await fileService.restoreFromTrash(trashedPath, item.originalPath);
         }
+        const { validSubjectId, validFolderId } = await ensureValidSubjectAndFolder(
+          metadata.subjectId,
+          metadata.folderId
+        );
         await pdfRepository.create({
           id: metadata.id,
           title: metadata.title,
-          subjectId: metadata.subjectId,
-          folderId: metadata.folderId,
+          subjectId: validSubjectId,
+          folderId: validFolderId,
           filePath: metadata.filePath,
           pageCount: metadata.pageCount,
         });
@@ -82,10 +117,11 @@ export const TrashScreen: React.FC<Props> = ({ navigation }) => {
           metadata.id
         );
       } else if (item.itemType === 'folder') {
+        const { validSubjectId } = await ensureValidSubjectAndFolder(metadata.subjectId);
         await folderRepository.create(
           {
             name: metadata.name,
-            subjectId: metadata.subjectId,
+            subjectId: validSubjectId,
           },
           metadata.id
         );

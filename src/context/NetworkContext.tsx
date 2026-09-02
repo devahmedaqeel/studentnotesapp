@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
-import { supabase } from '../services/supabase';
 
 export type NetworkStatusType = 'online' | 'offline' | 'connecting';
 
@@ -27,8 +26,7 @@ export const NetworkProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4000);
 
-      // Ping Supabase or reliable endpoint
-      const res = await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://supabase.co'}/auth/v1/health`, {
+      const res = await fetch('https://www.google.com/generate_204', {
         method: 'GET',
         signal: controller.signal,
       }).catch(() => null);
@@ -42,8 +40,6 @@ export const NetworkProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
 
   const handleNetStateChange = useCallback((state: NetInfoState) => {
-    // If state.isConnected is not explicitly false, treat the device as online.
-    // On Android, isInternetReachable is frequently delayed, null, or false on cellular networks.
     const connected = state.isConnected !== false;
     const isNowOnline = connected;
 
@@ -54,12 +50,8 @@ export const NetworkProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
 
   useEffect(() => {
-    // Initial fetch
     NetInfo.fetch().then(handleNetStateChange);
-
-    // Event listener
     const unsubscribe = NetInfo.addEventListener(handleNetStateChange);
-
     return () => {
       unsubscribe();
     };
@@ -68,26 +60,19 @@ export const NetworkProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const checkConnection = async (): Promise<boolean> => {
     const state = await NetInfo.fetch();
     const connected = state.isConnected !== false;
-    
+
     if (!connected) {
       setNetworkStatus('offline');
       return false;
     }
 
-    // On Android, NetInfo can report connected=true even when there's no actual internet.
-    // Do a real reachability check to verify.
     const reachable = await verifyReachable();
     setNetworkStatus(reachable ? 'online' : 'offline');
-    
-    // If NetInfo says connected, trust it even if our ping failed
-    // (the ping endpoint might be temporarily down but internet works)
     return connected;
   };
 
   const reconnectRealtime = async () => {
-    try {
-      supabase.realtime.connect();
-    } catch {}
+    // Firebase handles automatic reconnection natively
   };
 
   const isOnline = networkStatus === 'online';

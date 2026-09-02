@@ -23,19 +23,25 @@ export const notificationService = {
         // 1. Diary Deadlines Channel
         await Notifications.setNotificationChannelAsync('diary-deadlines', {
           name: 'Academic Deadlines & Diary',
-          importance: Notifications.AndroidImportance.HIGH,
-          vibrationPattern: [0, 250, 250, 250],
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 500, 250, 500],
           lightColor: '#4F46E5',
           sound: 'default',
+          enableVibrate: true,
+          showBadge: true,
+          lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
         });
 
         // 2. Timetable & Classes Channel
         await Notifications.setNotificationChannelAsync('timetable-schedule', {
           name: 'University Timetable & Daily Schedule',
-          importance: Notifications.AndroidImportance.HIGH,
-          vibrationPattern: [0, 250, 250, 250],
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 500, 250, 500],
           lightColor: '#F59E0B',
           sound: 'default',
+          enableVibrate: true,
+          showBadge: true,
+          lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
         });
 
         // 3. General Academic Reminders Channel
@@ -161,7 +167,8 @@ export const notificationService = {
             body: `"${event.title}" ${primaryLabel}`,
             data: { eventId: event.id, type: 'diary_event' },
             sound: 'default',
-            priority: Notifications.AndroidNotificationPriority.HIGH,
+            priority: Notifications.AndroidNotificationPriority.MAX,
+            vibrate: [0, 500, 250, 500],
           },
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.DATE,

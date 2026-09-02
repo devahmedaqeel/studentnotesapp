@@ -2,7 +2,8 @@ import { pdfRepository } from '../database/repositories/pdfRepository';
 import { pdfCreationService } from './pdfCreationService';
 import { PdfDocument } from '../types/pdf';
 import { PdfCompressionConfig } from '../types/compression';
-import { supabase } from './supabase';
+import { db } from './firebase';
+import { doc, deleteDoc } from 'firebase/firestore';
 
 export const pdfService = {
   async getAllPdfs(): Promise<PdfDocument[]> {
@@ -37,9 +38,9 @@ export const pdfService = {
   async deletePdf(id: string, userId?: string): Promise<boolean> {
     const success = await pdfRepository.delete(id);
 
-    if (success && userId) {
+    if (success && userId && userId !== 'guest_user') {
       try {
-        await supabase.from('pdfs').delete().eq('id', id).eq('user_id', userId);
+        await deleteDoc(doc(db, 'pdfs', id));
       } catch (e) {
         console.warn('PDF cloud delete warning:', e);
       }

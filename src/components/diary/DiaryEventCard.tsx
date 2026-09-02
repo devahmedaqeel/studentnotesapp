@@ -4,12 +4,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
 import { DiaryEvent } from '../../types/diary';
 import { diaryService } from '../../services/diaryService';
+import { SwipeableRow } from '../common/SwipeableRow';
 
 interface DiaryEventCardProps {
   event: DiaryEvent;
   onPress: () => void;
   onToggleComplete?: () => void;
   onToggleImportant?: () => void;
+  onDelete?: () => void;
 }
 
 export const DiaryEventCard: React.FC<DiaryEventCardProps> = ({
@@ -17,6 +19,7 @@ export const DiaryEventCard: React.FC<DiaryEventCardProps> = ({
   onPress,
   onToggleComplete,
   onToggleImportant,
+  onDelete,
 }) => {
   const { theme, isDark } = useTheme();
   const typeConfig = diaryService.getEventTypeConfig(event.eventType);
@@ -27,7 +30,7 @@ export const DiaryEventCard: React.FC<DiaryEventCardProps> = ({
     event.dueTime
   );
 
-  return (
+  const cardContent = (
     <TouchableOpacity
       activeOpacity={0.88}
       onPress={onPress}
@@ -177,6 +180,20 @@ export const DiaryEventCard: React.FC<DiaryEventCardProps> = ({
       </View>
     </TouchableOpacity>
   );
+
+  if (onDelete) {
+    return (
+      <SwipeableRow
+        onDelete={onDelete}
+        onFavoriteToggle={onToggleImportant}
+        isFavorite={event.isImportant}
+      >
+        {cardContent}
+      </SwipeableRow>
+    );
+  }
+
+  return cardContent;
 };
 
 const styles = StyleSheet.create({

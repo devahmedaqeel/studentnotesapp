@@ -150,5 +150,43 @@ jest.mock('expo-print', () => ({
   printToFileAsync: jest.fn(() => Promise.resolve({ uri: 'file:///mock/printed.pdf' })),
 }));
 
+jest.mock('firebase/app', () => ({
+  initializeApp: jest.fn(() => ({})),
+  getApps: jest.fn(() => [{}]),
+  getApp: jest.fn(() => ({})),
+}));
+
+jest.mock('firebase/auth', () => ({
+  getAuth: jest.fn(() => ({ currentUser: null })),
+  onAuthStateChanged: jest.fn((auth, cb) => {
+    cb(null);
+    return jest.fn();
+  }),
+  signInWithEmailAndPassword: jest.fn(() => Promise.resolve({ user: { uid: 'test-uid', email: 'test@example.com' } })),
+  createUserWithEmailAndPassword: jest.fn(() => Promise.resolve({ user: { uid: 'test-uid', email: 'test@example.com' } })),
+  sendPasswordResetEmail: jest.fn(() => Promise.resolve()),
+  signOut: jest.fn(() => Promise.resolve()),
+  updatePassword: jest.fn(() => Promise.resolve()),
+}));
+
+jest.mock('firebase/firestore', () => ({
+  getFirestore: jest.fn(() => ({})),
+  collection: jest.fn(),
+  query: jest.fn(),
+  where: jest.fn(),
+  getDocs: jest.fn(() => Promise.resolve({ docs: [] })),
+  doc: jest.fn((db, col, id) => ({ id, path: `${col}/${id}` })),
+  getDoc: jest.fn(() => Promise.resolve({ exists: () => false, data: () => ({}) })),
+  setDoc: jest.fn(() => Promise.resolve()),
+  deleteDoc: jest.fn(() => Promise.resolve()),
+}));
+
+jest.mock('firebase/storage', () => ({
+  getStorage: jest.fn(() => ({})),
+  ref: jest.fn(),
+  uploadBytes: jest.fn(() => Promise.resolve()),
+  getDownloadURL: jest.fn(() => Promise.resolve('https://mock.storage/file.pdf')),
+}));
+
 jest.setTimeout(15000);
 

@@ -45,7 +45,11 @@ export const SearchScreen: React.FC<Props> = ({ navigation }) => {
       </View>
 
       {query.length > 0 && (
-        <View style={styles.filterRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterRow}
+        >
           {(['all', 'subjects', 'folders', 'notes', 'pdfs', 'links'] as FilterCategory[]).map((cat) => (
             <TouchableOpacity
               key={cat}
@@ -68,7 +72,7 @@ export const SearchScreen: React.FC<Props> = ({ navigation }) => {
               </Text>
             </TouchableOpacity>
           ))}
-        </View>
+        </ScrollView>
       )}
 
       {loading ? (
@@ -86,7 +90,12 @@ export const SearchScreen: React.FC<Props> = ({ navigation }) => {
           icon="search-outline"
         />
       ) : (
-        <ScrollView contentContainerStyle={styles.resultsContent}>
+        <ScrollView
+          contentContainerStyle={styles.resultsContent}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}
+        >
           {/* Subjects Results */}
           {(filter === 'all' || filter === 'subjects') && results.subjects.length > 0 && (
             <View style={styles.section}>
@@ -200,6 +209,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 16,
   },
-  resultsContent: { padding: 16 },
+  resultsContent: { padding: 16, paddingBottom: 120 },
   section: { marginBottom: 20 },
 });

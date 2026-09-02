@@ -17,6 +17,8 @@ import { useTheme } from '../../hooks/useTheme';
 import { AppHeader } from '../../components/common/AppHeader';
 import { AppInput } from '../../components/common/AppInput';
 import { AppButton } from '../../components/common/AppButton';
+import { AppTimePicker } from '../../components/common/AppTimePicker';
+import { AppDatePicker } from '../../components/common/AppDatePicker';
 import { AttachDocumentModal } from '../../components/diary/AttachDocumentModal';
 import { subjectRepository } from '../../database/repositories/subjectRepository';
 import { diaryRepository } from '../../database/repositories/diaryRepository';
@@ -184,7 +186,7 @@ export const CreateDiaryEventScreen: React.FC<Props> = ({ navigation, route }) =
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: theme.colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
     >
       <AppHeader
@@ -195,7 +197,9 @@ export const CreateDiaryEventScreen: React.FC<Props> = ({ navigation, route }) =
       />
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: 160 }]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
       >
         {/* Title Input */}
@@ -307,21 +311,19 @@ export const CreateDiaryEventScreen: React.FC<Props> = ({ navigation, route }) =
         {/* Due Date & Time Inputs */}
         <View style={styles.dateTimeRow}>
           <View style={{ flex: 1.2 }}>
-            <AppInput
-              label="Due Date (YYYY-MM-DD) *"
+            <AppDatePicker
+              label="Due Date *"
               value={dueDate}
-              onChangeText={setDueDate}
-              placeholder="YYYY-MM-DD"
-              leftIcon="calendar-outline"
+              onChange={setDueDate}
             />
           </View>
           {hasSpecificTime && (
             <View style={{ flex: 1 }}>
-              <AppInput
-                label="Due Time (HH:mm)"
+              <AppTimePicker
+                label="Due Time"
                 value={dueTime}
-                onChangeText={setDueTime}
-                placeholder="23:59"
+                onChange={setDueTime}
+                presetType="deadline"
                 leftIcon="time-outline"
               />
             </View>

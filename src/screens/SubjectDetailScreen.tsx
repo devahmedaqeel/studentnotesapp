@@ -52,8 +52,8 @@ export const SubjectDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const { deleteSubject } = useSubjects();
   const { folders, loading: loadingFolders, refreshFolders } = useFolders(subjectId);
-  const { notes, loading: loadingNotes, refreshNotes, toggleFavorite: toggleFavNote } = useNotes(subjectId, null);
-  const { pdfs, loading: loadingPdfs, refreshPdfs, toggleFavorite: toggleFavPdf } = usePdfs(subjectId, null);
+  const { notes, loading: loadingNotes, refreshNotes, toggleFavorite: toggleFavNote, deleteNote } = useNotes(subjectId, null);
+  const { pdfs, loading: loadingPdfs, refreshPdfs, toggleFavorite: toggleFavPdf, deletePdf } = usePdfs(subjectId, null);
 
   const [showSubjectOptions, setShowSubjectOptions] = useState(false);
   const [showDeleteSubjectConfirm, setShowDeleteSubjectConfirm] = useState(false);
@@ -295,11 +295,17 @@ export const SubjectDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           data={notes}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
+          onRefresh={() => {
+            fetchSubject();
+            refreshNotes();
+          }}
+          refreshing={loadingNotes}
           renderItem={({ item }) => (
             <NoteCard
               note={item}
               onPress={() => navigation.navigate('NoteViewer', { noteId: item.id })}
               onFavoriteToggle={() => toggleFavNote(item.id)}
+              onDelete={() => deleteNote(item.id)}
             />
           )}
           ListEmptyComponent={
@@ -319,6 +325,11 @@ export const SubjectDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           data={pdfs}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
+          onRefresh={() => {
+            fetchSubject();
+            refreshPdfs();
+          }}
+          refreshing={loadingPdfs}
           renderItem={({ item }) => (
             <PdfCard
               pdf={item}
@@ -328,6 +339,7 @@ export const SubjectDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                 setShowPdfOptions(true);
               }}
               onFavoriteToggle={() => toggleFavPdf(item.id)}
+              onDelete={() => deletePdf(item.id)}
             />
           )}
           ListEmptyComponent={

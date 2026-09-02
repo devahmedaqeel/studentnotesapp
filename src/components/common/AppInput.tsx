@@ -30,9 +30,12 @@ export const AppInput: React.FC<AppInputProps> = ({
   onRightIconPress,
   containerStyle,
   style,
+  onFocus,
+  onBlur,
   ...props
 }) => {
   const { theme } = useTheme();
+  const [isFocused, setIsFocused] = React.useState(false);
   const activeIcon = leftIcon || icon;
 
   return (
@@ -48,7 +51,12 @@ export const AppInput: React.FC<AppInputProps> = ({
           styles.inputWrapper,
           {
             backgroundColor: theme.colors.card,
-            borderColor: error ? theme.colors.danger : theme.colors.border,
+            borderColor: error
+              ? theme.colors.danger
+              : isFocused
+              ? theme.colors.primary
+              : theme.colors.border,
+            borderWidth: isFocused ? 1.5 : 1,
             borderRadius: theme.radius.md,
           },
         ]}
@@ -57,12 +65,20 @@ export const AppInput: React.FC<AppInputProps> = ({
           <Ionicons
             name={activeIcon}
             size={20}
-            color={theme.colors.textSecondary}
+            color={isFocused ? theme.colors.primary : theme.colors.textSecondary}
             style={{ marginRight: theme.spacing.sm }}
           />
         )}
         <TextInput
           placeholderTextColor={theme.colors.textMuted}
+          onFocus={(e) => {
+            setIsFocused(true);
+            onFocus?.(e);
+          }}
+          onBlur={(e) => {
+            setIsFocused(false);
+            onBlur?.(e);
+          }}
           style={[
             styles.input,
             theme.typography.body1,

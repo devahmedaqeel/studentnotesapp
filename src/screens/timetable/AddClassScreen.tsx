@@ -17,6 +17,7 @@ import { useTheme } from '../../hooks/useTheme';
 import { AppHeader } from '../../components/common/AppHeader';
 import { AppInput } from '../../components/common/AppInput';
 import { AppButton } from '../../components/common/AppButton';
+import { AppTimePicker } from '../../components/common/AppTimePicker';
 import { subjectRepository } from '../../database/repositories/subjectRepository';
 import { timetableRepository } from '../../database/repositories/timetableRepository';
 import { timetableService, DAYS_LIST } from '../../services/timetableService';
@@ -185,7 +186,7 @@ export const AddClassScreen: React.FC<Props> = ({ navigation, route }) => {
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: theme.colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
     >
       <AppHeader
@@ -195,7 +196,12 @@ export const AddClassScreen: React.FC<Props> = ({ navigation, route }) => {
         onBack={() => navigation.goBack()}
       />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: 160 }]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+      >
         {/* Subject Selection */}
         <Text style={[styles.sectionLabel, { color: theme.colors.text }]}>Subject *</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.subjectRow}>
@@ -293,20 +299,20 @@ export const AddClassScreen: React.FC<Props> = ({ navigation, route }) => {
         {/* Start and End Times */}
         <View style={styles.timeInputsRow}>
           <View style={{ flex: 1 }}>
-            <AppInput
-              label="Start Time (HH:mm) *"
+            <AppTimePicker
+              label="Start Time *"
               value={startTime}
-              onChangeText={setStartTime}
-              placeholder="09:00"
+              onChange={setStartTime}
+              presetType="class"
               leftIcon="time-outline"
             />
           </View>
           <View style={{ flex: 1 }}>
-            <AppInput
-              label="End Time (HH:mm) *"
+            <AppTimePicker
+              label="End Time *"
               value={endTime}
-              onChangeText={setEndTime}
-              placeholder="10:00"
+              onChange={setEndTime}
+              presetType="class"
               leftIcon="time-outline"
             />
           </View>

@@ -1,6 +1,7 @@
 import { folderRepository } from '../database/repositories/folderRepository';
 import { Folder, CreateFolderInput, UpdateFolderInput } from '../types/folder';
-import { supabase } from './supabase';
+import { db } from './firebase';
+import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 
 export const folderService = {
   async getFoldersBySubject(subjectId: string): Promise<Folder[]> {
@@ -14,16 +15,20 @@ export const folderService = {
   async createFolder(input: CreateFolderInput, userId?: string): Promise<Folder> {
     const created = await folderRepository.create(input);
 
-    if (userId) {
+    if (userId && userId !== 'guest_user') {
       try {
-        await supabase.from('folders').upsert({
-          id: created.id,
-          user_id: userId,
-          subject_id: created.subjectId,
-          name: created.name,
-          created_at: created.createdAt,
-          updated_at: created.updatedAt,
-        });
+        await setDoc(
+          doc(db, 'folders', created.id),
+          {
+            id: created.id,
+            userId,
+            subjectId: created.subjectId,
+            name: created.name,
+            createdAt: created.createdAt,
+            updatedAt: created.updatedAt,
+          },
+          { merge: true }
+        );
       } catch (e) {
         console.warn('Folder cloud sync warning:', e);
       }
@@ -35,14 +40,18 @@ export const folderService = {
   async updateFolder(id: string, input: UpdateFolderInput, userId?: string): Promise<Folder | null> {
     const updated = await folderRepository.update(id, input);
 
-    if (updated && userId) {
+    if (updated && userId && userId !== 'guest_user') {
       try {
-        await supabase.from('folders').upsert({
-          id: updated.id,
-          user_id: userId,
-          name: updated.name,
-          updated_at: updated.updatedAt,
-        });
+        await setDoc(
+          doc(db, 'folders', updated.id),
+          {
+            id: updated.id,
+            userId,
+            name: updated.name,
+            updatedAt: updated.updatedAt,
+          },
+          { merge: true }
+        );
       } catch (e) {
         console.warn('Folder cloud update warning:', e);
       }
@@ -54,9 +63,9 @@ export const folderService = {
   async deleteFolder(id: string, userId?: string): Promise<boolean> {
     const success = await folderRepository.delete(id);
 
-    if (success && userId) {
+    if (success && userId && userId !== 'guest_user') {
       try {
-        await supabase.from('folders').delete().eq('id', id).eq('user_id', userId);
+        await deleteDoc(doc(db, 'folders', id));
       } catch (e) {
         console.warn('Folder cloud delete warning:', e);
       }

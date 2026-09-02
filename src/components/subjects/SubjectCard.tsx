@@ -6,21 +6,24 @@ import { useTheme } from '../../hooks/useTheme';
 import { SubjectIcon } from './SubjectIcon';
 import { formatDate } from '../../utils/date';
 import { formatNoteCount, formatPdfCount } from '../../utils/formatting';
+import { SwipeableRow } from '../common/SwipeableRow';
 
 export interface SubjectCardProps {
   subject: Subject;
   onPress: () => void;
   onMorePress?: () => void;
+  onDelete?: () => void;
 }
 
 export const SubjectCard: React.FC<SubjectCardProps> = ({
   subject,
   onPress,
   onMorePress,
+  onDelete,
 }) => {
   const { theme } = useTheme();
 
-  return (
+  const cardContent = (
     <TouchableOpacity
       style={[
         styles.card,
@@ -59,6 +62,16 @@ export const SubjectCard: React.FC<SubjectCardProps> = ({
       </Text>
     </TouchableOpacity>
   );
+
+  if (onDelete) {
+    return (
+      <SwipeableRow onDelete={onDelete}>
+        {cardContent}
+      </SwipeableRow>
+    );
+  }
+
+  return cardContent;
 };
 
 const styles = StyleSheet.create({

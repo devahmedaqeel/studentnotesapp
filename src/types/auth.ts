@@ -1,19 +1,28 @@
-import { User, Session } from '@supabase/supabase-js';
+import { User as FirebaseUser } from 'firebase/auth';
+
+export type AppUser = FirebaseUser & {
+  id: string;
+};
+
+export interface AuthSession {
+  user: AppUser;
+}
 
 export type AppAuthMode = 'OFFLINE_MODE' | 'AUTHENTICATED_MODE';
 
 export interface AuthState {
   mode: AppAuthMode;
   isOffline: boolean;
-  user: User | null;
-  session: Session | null;
+  user: AppUser | null;
+  session: AuthSession | null;
   loading: boolean;
 }
 
 export interface AuthResponse {
   success: boolean;
   error?: string;
-  session?: Session | null;
+  user?: AppUser | null;
+  session?: AuthSession | null;
 }
 
 export interface VerifyOtpParams {

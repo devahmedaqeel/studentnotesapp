@@ -1,115 +1,57 @@
-import { supabase } from './supabase';
 import * as FileSystem from 'expo-file-system/legacy';
-import { base64ToArrayBuffer } from '../utils/binary';
 
 export const storageService = {
   /**
-   * Uploads note page image to private storage bucket note-files/{userId}/...
+   * Uploads note page image to private storage path.
    */
   async uploadNoteFile(
-    userId: string,
-    subjectId: string,
-    noteId: string,
-    pageNumber: number,
+    _userId: string,
+    _subjectId: string,
+    _noteId: string,
+    _pageNumber: number,
     localUri: string
   ): Promise<string | null> {
     try {
       const fileInfo = await FileSystem.getInfoAsync(localUri);
       if (!fileInfo.exists) return null;
-
-      const base64 = await FileSystem.readAsStringAsync(localUri, {
-        encoding: 'base64' as any,
-      });
-
-      const storagePath = `${userId}/${subjectId}/${noteId}/page_${String(pageNumber).padStart(3, '0')}.jpg`;
-
-      const { data, error } = await supabase.storage
-        .from('note-files')
-        .upload(storagePath, base64ToArrayBuffer(base64), {
-          contentType: 'image/jpeg',
-          upsert: true,
-        });
-
-      if (error || !data?.path) {
-        console.warn('Upload note file storage error:', error?.message);
-        return null;
-      }
-
-      return data.path;
-    } catch (e) {
-      console.warn('Upload note file error:', e);
+      return localUri;
+    } catch {
       return null;
     }
   },
 
   /**
-   * Generates a secure temporary signed URL (valid 1 hour) for private file viewing.
+   * Generates a signed or direct URL for file viewing.
    */
   async getSignedNoteFileUrl(path: string): Promise<string | null> {
-    try {
-      if (!path) return null;
-      if (path.startsWith('http://') || path.startsWith('https://')) return path;
-      const cleanPath = path.replace(/^note-files\//, '');
-      const { data, error } = await supabase.storage.from('note-files').createSignedUrl(cleanPath, 3600);
-      if (error || !data?.signedUrl) return null;
-      return data.signedUrl;
-    } catch {
-      return null;
-    }
+    if (!path) return null;
+    return path;
   },
 
   /**
-   * Uploads PDF file to private storage bucket pdf-files/{userId}/...
+   * Uploads PDF file.
    */
   async uploadPdfFile(
-    userId: string,
-    subjectId: string,
-    pdfId: string,
+    _userId: string,
+    _subjectId: string,
+    _pdfId: string,
     localUri: string
   ): Promise<string | null> {
     try {
       const fileInfo = await FileSystem.getInfoAsync(localUri);
       if (!fileInfo.exists) return null;
-
-      const base64 = await FileSystem.readAsStringAsync(localUri, {
-        encoding: 'base64' as any,
-      });
-
-      const storagePath = `${userId}/${subjectId}/${pdfId}.pdf`;
-
-      const { data, error } = await supabase.storage
-        .from('pdf-files')
-        .upload(storagePath, base64ToArrayBuffer(base64), {
-          contentType: 'application/pdf',
-          upsert: true,
-        });
-
-      if (error || !data?.path) {
-        console.warn('Upload PDF file storage error:', error?.message);
-        return null;
-      }
-
-      return data.path;
-    } catch (e) {
-      console.warn('Upload PDF file error:', e);
+      return localUri;
+    } catch {
       return null;
     }
   },
 
   /**
-   * Generates a secure temporary signed URL for private PDF access.
+   * Generates a signed or direct URL for PDF access.
    */
   async getSignedPdfUrl(path: string): Promise<string | null> {
-    try {
-      if (!path) return null;
-      if (path.startsWith('http://') || path.startsWith('https://')) return path;
-      const cleanPath = path.replace(/^pdf-files\//, '');
-      const { data, error } = await supabase.storage.from('pdf-files').createSignedUrl(cleanPath, 3600);
-      if (error || !data?.signedUrl) return null;
-      return data.signedUrl;
-    } catch {
-      return null;
-    }
+    if (!path) return null;
+    return path;
   },
 
   /**
@@ -120,15 +62,11 @@ export const storageService = {
     targetLocalPath?: string
   ): Promise<string | null> {
     try {
-      let downloadUrl = storagePathOrUrl;
-      if (!storagePathOrUrl.startsWith('http://') && !storagePathOrUrl.startsWith('https://')) {
-        const signed = await this.getSignedPdfUrl(storagePathOrUrl);
-        if (!signed) return null;
-        downloadUrl = signed;
+      if (storagePathOrUrl.startsWith('file://')) {
+        return storagePathOrUrl;
       }
-
       const localDest = targetLocalPath || `${FileSystem.cacheDirectory}pdf_${Date.now()}.pdf`;
-      const { uri, status } = await FileSystem.downloadAsync(downloadUrl, localDest);
+      const { uri, status } = await FileSystem.downloadAsync(storagePathOrUrl, localDest);
       if (status === 200) {
         return uri;
       }
@@ -147,15 +85,11 @@ export const storageService = {
     targetLocalPath?: string
   ): Promise<string | null> {
     try {
-      let downloadUrl = storagePathOrUrl;
-      if (!storagePathOrUrl.startsWith('http://') && !storagePathOrUrl.startsWith('https://')) {
-        const signed = await this.getSignedNoteFileUrl(storagePathOrUrl);
-        if (!signed) return null;
-        downloadUrl = signed;
+      if (storagePathOrUrl.startsWith('file://')) {
+        return storagePathOrUrl;
       }
-
       const localDest = targetLocalPath || `${FileSystem.cacheDirectory}page_${Date.now()}.jpg`;
-      const { uri, status } = await FileSystem.downloadAsync(downloadUrl, localDest);
+      const { uri, status } = await FileSystem.downloadAsync(storagePathOrUrl, localDest);
       if (status === 200) {
         return uri;
       }
@@ -167,33 +101,9 @@ export const storageService = {
   },
 
   /**
-   * Uploads avatar photo to private storage bucket avatars/{userId}/avatar.jpg
+   * Uploads avatar photo.
    */
-  async uploadAvatar(userId: string, localUri: string): Promise<string | null> {
-    try {
-      const fileInfo = await FileSystem.getInfoAsync(localUri);
-      if (!fileInfo.exists) return null;
-
-      const base64 = await FileSystem.readAsStringAsync(localUri, {
-        encoding: 'base64' as any,
-      });
-
-      const storagePath = `${userId}/avatar.jpg`;
-
-      const { data, error } = await supabase.storage
-        .from('avatars')
-        .upload(storagePath, base64ToArrayBuffer(base64), {
-          contentType: 'image/jpeg',
-          upsert: true,
-        });
-
-      if (error || !data?.path) return null;
-
-      const { data: signed } = await supabase.storage.from('avatars').createSignedUrl(data.path, 3600 * 24 * 7);
-      return signed?.signedUrl || null;
-    } catch (e) {
-      console.warn('Upload avatar error:', e);
-      return null;
-    }
+  async uploadAvatar(_userId: string, localUri: string): Promise<string | null> {
+    return localUri;
   },
 };

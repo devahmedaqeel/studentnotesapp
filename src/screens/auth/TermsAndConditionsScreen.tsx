@@ -51,7 +51,7 @@ export const TermsAndConditionsScreen: React.FC<Props> = ({ navigation }) => {
 
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>5. Offline Data & Cloud Synchronization</Text>
           <Text style={[styles.bodyText, { color: theme.colors.textSecondary }]}>
-            Student Notes employs an offline-first architecture. Your local data remains securely stored on your device in SQLite. When you choose to authenticate and sync with Cloud Storage, data is synchronized with Supabase using Row-Level Security (RLS) policies to ensure private access.
+            Student Notes employs an offline-first architecture. Your local data remains securely stored on your device in SQLite. When you choose to authenticate and sync with Cloud Storage, data is synchronized with Firebase and Cloud Firestore using secure, user-isolated authentication and security rules to ensure private access.
           </Text>
 
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>6. Account Termination & Safety</Text>

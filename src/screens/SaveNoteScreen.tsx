@@ -68,9 +68,19 @@ export const SaveNoteScreen: React.FC<Props> = ({ navigation, route }) => {
       return;
     }
 
-    if (!selectedSubjectId) {
-      Alert.alert('Subject Required', 'Please select or create a subject first.');
-      return;
+    let targetSubjectId = selectedSubjectId;
+    if (!targetSubjectId) {
+      if (subjects.length > 0) {
+        targetSubjectId = subjects[0].id;
+      } else {
+        const defaultSub = await subjectRepository.create({
+          name: 'General Notes',
+          icon: 'book-outline',
+          color: '#4F46E5',
+        });
+        targetSubjectId = defaultSub.id;
+        setSubjects([defaultSub]);
+      }
     }
 
     const noteId = generateId('note');
@@ -83,7 +93,7 @@ export const SaveNoteScreen: React.FC<Props> = ({ navigation, route }) => {
       for (let i = 0; i < pages.length; i++) {
         const savedPath = await fileService.saveNotePageImage(
           pages[i],
-          selectedSubjectId,
+          targetSubjectId,
           noteId,
           i
         );
@@ -94,7 +104,7 @@ export const SaveNoteScreen: React.FC<Props> = ({ navigation, route }) => {
       const createdNote = await noteRepository.create(
         {
           title: title.trim(),
-          subjectId: selectedSubjectId,
+          subjectId: targetSubjectId,
           folderId: selectedFolderId,
           pageFilePaths: savedPagePaths,
         },
@@ -107,8 +117,8 @@ export const SaveNoteScreen: React.FC<Props> = ({ navigation, route }) => {
         await tagRepository.setNoteTags(noteId, tagList);
       }
 
-      const targetSub = subjects.find((s) => s.id === selectedSubjectId);
-      const subjectName = targetSub ? targetSub.name : 'Subject';
+      const targetSub = subjects.find((s) => s.id === targetSubjectId);
+      const subjectName = targetSub ? targetSub.name : 'General Notes';
 
       Alert.alert(
         '🎉 Note Saved Successfully!',
@@ -131,12 +141,12 @@ export const SaveNoteScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
-  const extraBottomPadding = Math.max(insets.bottom, 20) + 140;
+  const extraBottomPadding = Math.max(insets.bottom, 20) + 180;
 
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: theme.colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
     >
       <AppHeader title="Save Note" showBack onBack={() => navigation.goBack()} />
@@ -144,6 +154,7 @@ export const SaveNoteScreen: React.FC<Props> = ({ navigation, route }) => {
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: extraBottomPadding }]}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
       >
         {/* Preview Header */}

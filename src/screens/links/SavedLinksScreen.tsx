@@ -295,6 +295,8 @@ export const SavedLinksScreen: React.FC<Props> = ({ navigation, route }) => {
         <FlatList
           data={links}
           keyExtractor={(item) => item.id}
+          onRefresh={fetchLinks}
+          refreshing={loading}
           renderItem={({ item }) => (
             <ResourceCard
               link={item}

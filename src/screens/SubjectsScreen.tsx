@@ -75,6 +75,8 @@ export const SubjectsScreen: React.FC<Props> = ({ navigation }) => {
           data={subjects}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
+          onRefresh={refreshSubjects}
+          refreshing={loading}
           renderItem={({ item }) => (
             <SubjectCard
               subject={item}
@@ -84,6 +86,10 @@ export const SubjectsScreen: React.FC<Props> = ({ navigation }) => {
               onMorePress={() => {
                 setSelectedSubject(item);
                 setShowOptions(true);
+              }}
+              onDelete={() => {
+                setSelectedSubject(item);
+                setShowDeleteConfirm(true);
               }}
             />
           )}

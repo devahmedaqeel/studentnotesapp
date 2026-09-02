@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Animated,
   Easing,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -51,8 +52,8 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const { isOffline, profile, user } = useAuth();
 
   const { subjects, loading: loadingSubjects, refreshSubjects } = useSubjects();
-  const { notes, loading: loadingNotes, refreshNotes } = useNotes();
-  const { pdfs, loading: loadingPdfs, refreshPdfs } = usePdfs();
+  const { notes, loading: loadingNotes, refreshNotes, toggleFavorite: toggleFavNote } = useNotes();
+  const { pdfs, loading: loadingPdfs, refreshPdfs, toggleFavorite: toggleFavPdf } = usePdfs();
   const [docCount, setDocCount] = useState(0);
   const [linkCount, setLinkCount] = useState(0);
   const [upcomingDeadlines, setUpcomingDeadlines] = useState<DiaryEvent[]>([]);
@@ -169,6 +170,21 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     return `${greeting} 👋`;
   };
 
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        refreshSubjects(),
+        refreshNotes(),
+        refreshPdfs(),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const presetData = AVATAR_PRESETS.find((p) => p.id === profile?.avatarPreset) || AVATAR_PRESETS[0];
   const activeRingColor = profile?.ringColor || (isOffline ? '#F59E0B' : '#6366F1');
 
@@ -180,6 +196,14 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
           { paddingTop: Math.max(insets.top, 12) + 8, paddingBottom: 24 },
         ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.colors.primary}
+            colors={[theme.colors.primary]}
+          />
+        }
       >
         {/* Clean Header */}
         <View style={styles.header}>
@@ -241,11 +265,68 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </View>
 
+        {/* Academic Quick Stats Ribbon */}
+        <View style={[styles.statsRibbon, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <TouchableOpacity
+            style={styles.ribbonItem}
+            onPress={() => navigation.navigate('Subjects' as any)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.ribbonIconCircle, { backgroundColor: '#EEF2FF' }]}>
+              <Ionicons name="folder-open" size={16} color="#6366F1" />
+            </View>
+            <Text style={[styles.ribbonCount, { color: theme.colors.text }]}>{subjects.length}</Text>
+            <Text style={[styles.ribbonLabel, { color: theme.colors.textSecondary }]}>Subjects</Text>
+          </TouchableOpacity>
+
+          <View style={[styles.ribbonDivider, { backgroundColor: theme.colors.borderLight }]} />
+
+          <TouchableOpacity
+            style={styles.ribbonItem}
+            onPress={() => (navigation.getParent() as any)?.navigate('Scanner', {})}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.ribbonIconCircle, { backgroundColor: '#ECFDF5' }]}>
+              <Ionicons name="document-text" size={16} color="#10B981" />
+            </View>
+            <Text style={[styles.ribbonCount, { color: theme.colors.text }]}>{notes.length}</Text>
+            <Text style={[styles.ribbonLabel, { color: theme.colors.textSecondary }]}>Notes</Text>
+          </TouchableOpacity>
+
+          <View style={[styles.ribbonDivider, { backgroundColor: theme.colors.borderLight }]} />
+
+          <TouchableOpacity
+            style={styles.ribbonItem}
+            onPress={() => (navigation.getParent() as any)?.navigate('CreatePdf', { imagePaths: [] })}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.ribbonIconCircle, { backgroundColor: '#FEF2F2' }]}>
+              <Ionicons name="document" size={16} color="#EF4444" />
+            </View>
+            <Text style={[styles.ribbonCount, { color: theme.colors.text }]}>{pdfs.length}</Text>
+            <Text style={[styles.ribbonLabel, { color: theme.colors.textSecondary }]}>PDFs</Text>
+          </TouchableOpacity>
+
+          <View style={[styles.ribbonDivider, { backgroundColor: theme.colors.borderLight }]} />
+
+          <TouchableOpacity
+            style={styles.ribbonItem}
+            onPress={() => (navigation.getParent() as any)?.navigate('StudentDiary')}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.ribbonIconCircle, { backgroundColor: '#FFFBEB' }]}>
+              <Ionicons name="alarm" size={16} color="#F59E0B" />
+            </View>
+            <Text style={[styles.ribbonCount, { color: theme.colors.text }]}>{upcomingDeadlines.length}</Text>
+            <Text style={[styles.ribbonLabel, { color: theme.colors.textSecondary }]}>Deadlines</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Search Bar Trigger */}
         <TouchableOpacity
           activeOpacity={0.9}
           onPress={() => navigation.navigate('Search' as any)}
-          style={{ marginVertical: 16 }}
+          style={{ marginVertical: 14 }}
         >
           <View pointerEvents="none">
             <SearchBar value="" onChangeText={() => {}} placeholder="Search notes, PDFs, subjects..." />
@@ -482,6 +563,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 key={n.id}
                 note={n}
                 onPress={() => (navigation.getParent() as any)?.navigate('NoteViewer', { noteId: n.id })}
+                onFavoriteToggle={() => toggleFavNote(n.id)}
               />
             ))}
           </>
@@ -498,6 +580,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
                 key={p.id}
                 pdf={p}
                 onPress={() => (navigation.getParent() as any)?.navigate('PdfViewer', { pdfId: p.id })}
+                onFavoriteToggle={() => toggleFavPdf(p.id)}
               />
             ))}
           </>
@@ -530,6 +613,48 @@ const styles = StyleSheet.create({
     fontSize: 19,
     fontWeight: '700',
     lineHeight: 26,
+  },
+  statsRibbon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginTop: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  ribbonItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ribbonIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  ribbonCount: {
+    fontSize: 15,
+    fontWeight: '800',
+    lineHeight: 18,
+  },
+  ribbonLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  ribbonDivider: {
+    width: 1,
+    height: 30,
   },
   headerActions: {
     flexDirection: 'row',

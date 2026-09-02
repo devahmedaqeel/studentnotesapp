@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import {
-  TouchableOpacity,
+  TouchableWithoutFeedback,
+  Animated,
   Text,
   ActivityIndicator,
-  StyleSheet,
   ViewStyle,
   TextStyle,
 } from 'react-native';
@@ -38,6 +38,26 @@ export const AppButton: React.FC<AppButtonProps> = ({
   accessibilityLabel,
 }) => {
   const { theme } = useTheme();
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    if (disabled || loading) return;
+    Animated.spring(scaleAnim, {
+      toValue: 0.96,
+      useNativeDriver: true,
+      speed: 30,
+      bounciness: 4,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 25,
+      bounciness: 6,
+    }).start();
+  };
 
   const getContainerStyle = (): ViewStyle => {
     let base: ViewStyle = {
@@ -45,6 +65,11 @@ export const AppButton: React.FC<AppButtonProps> = ({
       alignItems: 'center',
       justifyContent: 'center',
       borderRadius: theme.radius.md,
+      shadowColor: variant === 'primary' ? theme.colors.primary : '#000',
+      shadowOffset: { width: 0, height: variant === 'primary' ? 3 : 1 },
+      shadowOpacity: variant === 'primary' ? 0.25 : 0.08,
+      shadowRadius: variant === 'primary' ? 6 : 3,
+      elevation: variant === 'primary' ? 3 : 1,
     };
 
     // Size
@@ -90,46 +115,54 @@ export const AppButton: React.FC<AppButtonProps> = ({
   };
 
   return (
-    <TouchableOpacity
-      style={[getContainerStyle(), style]}
+    <TouchableWithoutFeedback
       onPress={onPress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
       disabled={disabled || loading}
-      activeOpacity={0.8}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel || title}
     >
-      {loading ? (
-        <ActivityIndicator size="small" color={getTextColor()} />
-      ) : (
-        <>
-          {icon && iconPosition === 'left' && (
-            <Ionicons
-              name={icon}
-              size={size === 'small' ? 16 : 20}
-              color={getTextColor()}
-              style={{ marginRight: theme.spacing.xs }}
-            />
-          )}
-          <Text
-            style={[
-              theme.typography.button,
-              { color: getTextColor() },
-              size === 'small' && { fontSize: 14 },
-              textStyle,
-            ]}
-          >
-            {title}
-          </Text>
-          {icon && iconPosition === 'right' && (
-            <Ionicons
-              name={icon}
-              size={size === 'small' ? 16 : 20}
-              color={getTextColor()}
-              style={{ marginLeft: theme.spacing.xs }}
-            />
-          )}
-        </>
-      )}
-    </TouchableOpacity>
+      <Animated.View
+        style={[
+          getContainerStyle(),
+          style,
+          { transform: [{ scale: scaleAnim }] },
+        ]}
+      >
+        {loading ? (
+          <ActivityIndicator size="small" color={getTextColor()} />
+        ) : (
+          <>
+            {icon && iconPosition === 'left' && (
+              <Ionicons
+                name={icon}
+                size={size === 'small' ? 16 : 20}
+                color={getTextColor()}
+                style={{ marginRight: theme.spacing.xs }}
+              />
+            )}
+            <Text
+              style={[
+                theme.typography.button,
+                { color: getTextColor() },
+                size === 'small' && { fontSize: 14 },
+                textStyle,
+              ]}
+            >
+              {title}
+            </Text>
+            {icon && iconPosition === 'right' && (
+              <Ionicons
+                name={icon}
+                size={size === 'small' ? 16 : 20}
+                color={getTextColor()}
+                style={{ marginLeft: theme.spacing.xs }}
+              />
+            )}
+          </>
+        )}
+      </Animated.View>
+    </TouchableWithoutFeedback>
   );
 };

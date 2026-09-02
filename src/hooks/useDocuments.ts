@@ -66,10 +66,6 @@ export const useDocuments = (initialFolderId?: string | null) => {
     }, [fetchFolders, fetchDocuments])
   );
 
-  useEffect(() => {
-    fetchDocuments();
-  }, [fetchDocuments]);
-
   const onRefresh = async () => {
     setRefreshing(true);
     await Promise.all([fetchFolders(), fetchDocuments()]);

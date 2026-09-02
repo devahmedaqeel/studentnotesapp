@@ -1,7 +1,8 @@
 import { getDatabase, sanitizeParams } from '../database';
 import { SavedLink, SavedLinkInput, ResourceType, LinkSortOption } from '../../types/savedLink';
 import { generateId } from '../../utils/id';
-import { supabase } from '../../services/supabase';
+import { db } from '../../services/firebase';
+import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 
 export interface SavedLinkFilterOptions {
   resourceType?: ResourceType | 'all' | 'favorites';
@@ -196,12 +197,12 @@ export const savedLinkRepository = {
    * Creates a new saved link.
    */
   async create(input: SavedLinkInput, userId?: string): Promise<SavedLink> {
-    const db = await getDatabase();
+    const dbInst = await getDatabase();
     const id = generateId('link');
     const now = Date.now();
     const tagsJson = JSON.stringify(input.tags || []);
 
-    await db.runAsync(
+    await dbInst.runAsync(
       `INSERT INTO saved_links (
         id, userId, originalUrl, cleanedUrl, title, resourceType,
         customType, domain, faviconUrl, previewImageUrl, description,
@@ -238,27 +239,31 @@ export const savedLinkRepository = {
 
     if (userId && userId !== 'guest_user') {
       try {
-        await supabase.from('saved_links').upsert({
-          id,
-          user_id: userId,
-          original_url: input.originalUrl.trim(),
-          cleaned_url: input.cleanedUrl.trim(),
-          title: input.title.trim(),
-          resource_type: input.resourceType,
-          custom_type: input.customType || null,
-          domain: input.domain.toLowerCase().trim(),
-          favicon_url: input.faviconUrl || null,
-          preview_image_url: input.previewImageUrl || null,
-          description: input.description || null,
-          subject_id: input.subjectId || null,
-          subject_name: input.subjectName || null,
-          category: input.category || null,
-          tags: tagsJson,
-          personal_note: input.personalNote || null,
-          is_favorite: input.favorite ? true : false,
-          created_at: now,
-          updated_at: now,
-        });
+        await setDoc(
+          doc(db, 'saved_links', id),
+          {
+            id,
+            userId,
+            originalUrl: input.originalUrl.trim(),
+            cleanedUrl: input.cleanedUrl.trim(),
+            title: input.title.trim(),
+            resourceType: input.resourceType,
+            customType: input.customType || null,
+            domain: input.domain.toLowerCase().trim(),
+            faviconUrl: input.faviconUrl || null,
+            previewImageUrl: input.previewImageUrl || null,
+            description: input.description || null,
+            subjectId: input.subjectId || null,
+            subjectName: input.subjectName || null,
+            category: input.category || null,
+            tags: tagsJson,
+            personalNote: input.personalNote || null,
+            favorite: Boolean(input.favorite),
+            createdAt: now,
+            updatedAt: now,
+          },
+          { merge: true }
+        );
       } catch (e) {
         console.warn('Cloud link sync notice:', e);
       }
@@ -275,7 +280,7 @@ export const savedLinkRepository = {
     const existing = await this.getById(id);
     if (!existing) return null;
 
-    const db = await getDatabase();
+    const dbInst = await getDatabase();
     const now = Date.now();
 
     const title = input.title !== undefined ? input.title.trim() : existing.title;
@@ -294,7 +299,7 @@ export const savedLinkRepository = {
     const personalNote = input.personalNote !== undefined ? input.personalNote : existing.personalNote;
     const favorite = input.favorite !== undefined ? (input.favorite ? 1 : 0) : (existing.favorite ? 1 : 0);
 
-    await db.runAsync(
+    await dbInst.runAsync(
       `UPDATE saved_links SET
         title = ?,
         originalUrl = ?,
@@ -336,26 +341,30 @@ export const savedLinkRepository = {
 
     if (existing.userId && existing.userId !== 'guest_user') {
       try {
-        await supabase.from('saved_links').upsert({
-          id,
-          user_id: existing.userId,
-          original_url: originalUrl,
-          cleaned_url: cleanedUrl,
-          title,
-          resource_type: resourceType,
-          custom_type: customType || null,
-          domain,
-          favicon_url: faviconUrl || null,
-          preview_image_url: previewImageUrl || null,
-          description: description || null,
-          subject_id: subjectId || null,
-          subject_name: subjectName || null,
-          category: category || null,
-          tags: tagsJson,
-          personal_note: personalNote || null,
-          is_favorite: Boolean(favorite),
-          updated_at: now,
-        });
+        await setDoc(
+          doc(db, 'saved_links', id),
+          {
+            id,
+            userId: existing.userId,
+            originalUrl,
+            cleanedUrl,
+            title,
+            resourceType,
+            customType: customType || null,
+            domain,
+            faviconUrl: faviconUrl || null,
+            previewImageUrl: previewImageUrl || null,
+            description: description || null,
+            subjectId: subjectId || null,
+            subjectName: subjectName || null,
+            category: category || null,
+            tags: tagsJson,
+            personalNote: personalNote || null,
+            favorite: Boolean(favorite),
+            updatedAt: now,
+          },
+          { merge: true }
+        );
       } catch (e) {
         console.warn('Cloud link update sync notice:', e);
       }
@@ -372,21 +381,26 @@ export const savedLinkRepository = {
     const existing = await this.getById(id);
     if (!existing) return false;
 
-    const db = await getDatabase();
+    const dbInst = await getDatabase();
     const newFav = !existing.favorite;
     const now = Date.now();
-    await db.runAsync(
+    await dbInst.runAsync(
       `UPDATE saved_links SET favorite = ?, updatedAt = ? WHERE id = ?`,
       sanitizeParams([newFav ? 1 : 0, now, id])
     );
 
     if (existing.userId && existing.userId !== 'guest_user') {
       try {
-        await supabase
-          .from('saved_links')
-          .update({ is_favorite: newFav, updated_at: now })
-          .eq('id', id);
-      } catch (e) {}
+        await setDoc(
+          doc(db, 'saved_links', id),
+          {
+            id,
+            favorite: newFav,
+            updatedAt: now,
+          },
+          { merge: true }
+        );
+      } catch {}
     }
 
     return newFav;
@@ -398,13 +412,13 @@ export const savedLinkRepository = {
   async delete(id: string): Promise<boolean> {
     if (!id) return false;
     const existing = await this.getById(id);
-    const db = await getDatabase();
-    await db.runAsync(`DELETE FROM saved_links WHERE id = ?`, sanitizeParams([id]));
+    const dbInst = await getDatabase();
+    await dbInst.runAsync(`DELETE FROM saved_links WHERE id = ?`, sanitizeParams([id]));
 
     if (existing?.userId && existing.userId !== 'guest_user') {
       try {
-        await supabase.from('saved_links').delete().eq('id', id);
-      } catch (e) {}
+        await deleteDoc(doc(db, 'saved_links', id));
+      } catch {}
     }
     return true;
   },

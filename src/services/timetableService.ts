@@ -36,27 +36,87 @@ export const timetableService = {
   },
 
   /**
-   * Converts "HH:mm" (24-hour) string to "h:mm AM/PM".
+   * Normalizes arbitrary time string into clean "HH:mm" (24-hour) format.
+   * Handles "10" -> "10:00", "9" -> "09:00", "9:30" -> "09:30", "1:30 PM" -> "13:30", etc.
    */
-  formatTime12(hhMm: string): string {
-    if (!hhMm || !hhMm.includes(':')) return hhMm || '';
-    const [hStr, mStr] = hhMm.split(':');
+  normalizeTime(timeStr: string): string {
+    if (!timeStr) return '09:00';
+    let clean = timeStr.trim();
+
+    // Check if AM/PM is present
+    const isPm = /pm/i.test(clean);
+    const isAm = /am/i.test(clean);
+    clean = clean.replace(/am|pm/gi, '').trim();
+
+    let h = 0;
+    let m = 0;
+
+    if (clean.includes(':')) {
+      const parts = clean.split(':');
+      h = parseInt(parts[0], 10) || 0;
+      m = parseInt(parts[1], 10) || 0;
+    } else {
+      h = parseInt(clean, 10) || 0;
+      m = 0;
+    }
+
+    if (isPm && h < 12) h += 12;
+    if (isAm && h === 12) h = 0;
+
+    h = Math.max(0, Math.min(23, h));
+    m = Math.max(0, Math.min(59, m));
+
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  },
+
+  /**
+   * Converts "HH:mm" (24-hour) string to "h:mm AM/PM" or "hh:mm AM/PM".
+   */
+  formatTime12(hhMm: string, padHour: boolean = false): string {
+    if (!hhMm) return '09:00 AM';
+    const normalized = this.normalizeTime(hhMm);
+    const [hStr, mStr] = normalized.split(':');
     const h = parseInt(hStr, 10);
     const m = parseInt(mStr, 10);
-    if (isNaN(h) || isNaN(m)) return hhMm;
 
     const period = h >= 12 ? 'PM' : 'AM';
     const displayHour = h % 12 || 12;
+    const hourFormatted = padHour ? String(displayHour).padStart(2, '0') : String(displayHour);
     const displayMin = String(m).padStart(2, '0');
-    return `${displayHour}:${displayMin} ${period}`;
+    return `${hourFormatted}:${displayMin} ${period}`;
+  },
+
+  /**
+   * Converts 12-hour components (hour 1-12, min 0-59, AM/PM) into 24-hour "HH:mm" string.
+   */
+  to24HourString(hour12: number, minute: number, period: 'AM' | 'PM'): string {
+    let h = hour12 % 12;
+    if (period === 'PM') h += 12;
+    const m = Math.max(0, Math.min(59, minute));
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  },
+
+  /**
+   * Converts 24-hour "HH:mm" string to 12-hour components.
+   */
+  to12HourComponents(hhMm: string): { hour: number; minute: number; period: 'AM' | 'PM'; formatted: string } {
+    const normalized = this.normalizeTime(hhMm);
+    const [hStr, mStr] = normalized.split(':');
+    const h = parseInt(hStr, 10) || 0;
+    const m = parseInt(mStr, 10) || 0;
+    const period: 'AM' | 'PM' = h >= 12 ? 'PM' : 'AM';
+    const hour = h % 12 || 12;
+    const formatted = `${String(hour).padStart(2, '0')}:${String(m).padStart(2, '0')} ${period}`;
+    return { hour, minute: m, period, formatted };
   },
 
   /**
    * Converts "HH:mm" string to total minutes from midnight.
    */
   timeToMinutes(hhMm: string): number {
-    if (!hhMm || !hhMm.includes(':')) return 0;
-    const [hStr, mStr] = hhMm.split(':');
+    if (!hhMm) return 0;
+    const normalized = this.normalizeTime(hhMm);
+    const [hStr, mStr] = normalized.split(':');
     const h = parseInt(hStr, 10) || 0;
     const m = parseInt(mStr, 10) || 0;
     return h * 60 + m;
@@ -77,10 +137,12 @@ export const timetableService = {
    * e.g. "09:30" -> "11:00" => "1 hr 30 mins"
    */
   calculateDuration(startTime: string, endTime: string): string {
+    if (!startTime || !endTime) return '1 hour';
     const startMins = this.timeToMinutes(startTime);
     const endMins = this.timeToMinutes(endTime);
     let diff = endMins - startMins;
     if (diff < 0) diff += 24 * 60; // overnight wrap if any
+    if (diff === 0) return '0 mins';
 
     const hours = Math.floor(diff / 60);
     const mins = diff % 60;

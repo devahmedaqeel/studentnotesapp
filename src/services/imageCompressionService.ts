@@ -104,16 +104,15 @@ export const imageCompressionService = {
     }
 
     const safePct = Math.max(1, Math.min(99, compressionPercent));
-    const quality = (100 - safePct) / 100;
-    let factor = Math.max(0.08, Math.min(0.95, quality * 0.85));
+    let targetRatio = (100 - safePct) / 100;
 
     if (format === 'webp') {
-      factor *= 0.85;
+      targetRatio = Math.max(0.05, targetRatio * 0.90);
     } else if (format === 'png') {
-      factor = Math.max(0.40, factor * 1.3);
+      targetRatio = Math.max(0.35, Math.min(0.95, targetRatio * 1.25));
     }
 
-    const estimatedSize = Math.max(100, Math.round(originalSize * factor));
+    const estimatedSize = Math.max(500, Math.round(originalSize * targetRatio));
     const savedBytes = Math.max(0, originalSize - estimatedSize);
     const savedPercentage = Math.min(99, Math.max(1, Math.round((savedBytes / originalSize) * 100)));
 
@@ -150,7 +149,7 @@ export const imageCompressionService = {
   },
 
   /**
-   * Compresses a single image with guaranteed physical byte reduction when possible.
+   * Compresses a single image with guaranteed physical byte reduction and accurate scaling.
    * Performs actual image re-encoding, resolution optimization, and file system size verification.
    */
   async compressImage(
@@ -206,8 +205,8 @@ export const imageCompressionService = {
 
     // Safety multi-pass: If compressed output is NOT smaller than original (and original > 40 KB)
     if (compressedSize >= originalSize && originalSize > 40960) {
-      const fallbackActions: ImageManipulator.Action[] = [];
       const fallbackMaxDim = Math.min(meta.width, meta.height, 1280);
+      const fallbackActions: ImageManipulator.Action[] = [];
       if (meta.width >= meta.height) {
         fallbackActions.push({ resize: { width: fallbackMaxDim } });
       } else {
@@ -220,12 +219,14 @@ export const imageCompressionService = {
         base64: includeBase64,
       });
 
-      const secondInfo = await FileSystem.getInfoAsync(secondPass.uri);
-      const secondSize = (secondInfo as any).size || 0;
+      if (secondPass && secondPass.uri) {
+        const secondInfo = await FileSystem.getInfoAsync(secondPass.uri);
+        const secondSize = (secondInfo as any).size || 0;
 
-      if (secondSize < originalSize) {
-        result = secondPass;
-        compressedSize = secondSize;
+        if (secondSize < originalSize) {
+          result = secondPass;
+          compressedSize = secondSize;
+        }
       }
     }
 

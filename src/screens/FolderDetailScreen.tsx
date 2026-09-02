@@ -149,6 +149,11 @@ export const FolderDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           data={notes}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
+          onRefresh={() => {
+            fetchFolder();
+            refreshNotes();
+          }}
+          refreshing={loadingNotes}
           renderItem={({ item }) => (
             <NoteCard
               note={item}
@@ -173,6 +178,11 @@ export const FolderDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           data={pdfs}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
+          onRefresh={() => {
+            fetchFolder();
+            refreshPdfs();
+          }}
+          refreshing={loadingPdfs}
           renderItem={({ item }) => (
             <PdfCard
               pdf={item}

@@ -1,6 +1,7 @@
 import { noteRepository } from '../database/repositories/noteRepository';
 import { Note, CreateNoteInput, UpdateNoteInput } from '../types/note';
-import { supabase } from './supabase';
+import { db } from './firebase';
+import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 
 export const noteService = {
   async getAllNotes(): Promise<Note[]> {
@@ -18,18 +19,23 @@ export const noteService = {
   async createNote(input: CreateNoteInput, userId?: string): Promise<Note> {
     const created = await noteRepository.create(input);
 
-    if (userId) {
+    if (userId && userId !== 'guest_user') {
       try {
-        await supabase.from('notes').upsert({
-          id: created.id,
-          user_id: userId,
-          subject_id: created.subjectId,
-          folder_id: created.folderId || null,
-          title: created.title,
-          is_favorite: created.favorite,
-          created_at: created.createdAt,
-          updated_at: created.updatedAt,
-        });
+        await setDoc(
+          doc(db, 'notes', created.id),
+          {
+            id: created.id,
+            userId,
+            subjectId: created.subjectId,
+            folderId: created.folderId || null,
+            title: created.title,
+            favorite: Boolean(created.favorite),
+            thumbnailPath: created.thumbnailPath || null,
+            createdAt: created.createdAt,
+            updatedAt: created.updatedAt,
+          },
+          { merge: true }
+        );
       } catch (e) {
         console.warn('Note cloud sync warning:', e);
       }
@@ -41,15 +47,19 @@ export const noteService = {
   async updateNote(id: string, input: UpdateNoteInput, userId?: string): Promise<Note | null> {
     const updated = await noteRepository.update(id, input);
 
-    if (updated && userId) {
+    if (updated && userId && userId !== 'guest_user') {
       try {
-        await supabase.from('notes').upsert({
-          id: updated.id,
-          user_id: userId,
-          title: updated.title,
-          is_favorite: updated.favorite,
-          updated_at: updated.updatedAt,
-        });
+        await setDoc(
+          doc(db, 'notes', updated.id),
+          {
+            id: updated.id,
+            userId,
+            title: updated.title,
+            favorite: Boolean(updated.favorite),
+            updatedAt: updated.updatedAt,
+          },
+          { merge: true }
+        );
       } catch (e) {
         console.warn('Note cloud update warning:', e);
       }
@@ -61,9 +71,9 @@ export const noteService = {
   async deleteNote(id: string, userId?: string): Promise<boolean> {
     const success = await noteRepository.delete(id);
 
-    if (success && userId) {
+    if (success && userId && userId !== 'guest_user') {
       try {
-        await supabase.from('notes').delete().eq('id', id).eq('user_id', userId);
+        await deleteDoc(doc(db, 'notes', id));
       } catch (e) {
         console.warn('Note cloud delete warning:', e);
       }

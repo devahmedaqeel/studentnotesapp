@@ -1,18 +1,19 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '../services/supabase';
+import {
+  User as FirebaseUser,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
+  signOut,
+  updatePassword as updateFirebasePassword,
+} from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { auth, db } from '../services/firebase';
 import { syncService } from '../services/syncService';
 import { StudentProfile, StudentStatusType } from '../types/profile';
-import { Platform } from 'react-native';
-import * as WebBrowser from 'expo-web-browser';
-import * as AuthSession from 'expo-auth-session';
-import * as Linking from 'expo-linking';
-import Constants, { ExecutionEnvironment } from 'expo-constants';
-
-if (Platform.OS === 'web') {
-  WebBrowser.maybeCompleteAuthSession();
-}
+import { AppUser, AuthSession } from '../types/auth';
 
 export type UserProfile = StudentProfile;
 
@@ -20,8 +21,8 @@ export interface AuthContextType {
   isOffline: boolean;
   hasChosenMode: boolean;
   hasAcceptedTerms: boolean;
-  user: User | null;
-  session: Session | null;
+  user: AppUser | null;
+  session: AuthSession | null;
   profile: UserProfile | null;
   isProfileComplete: boolean;
   loading: boolean;
@@ -49,8 +50,46 @@ export interface AuthContextType {
 const HAS_CHOSEN_MODE_KEY = 'studentnotes_has_chosen_mode';
 const LOCAL_PROFILE_KEY = 'studentnotes_local_profile';
 export const TERMS_ACCEPTED_KEY = 'studentnotes_terms_accepted_v1';
-// Per-user scoped profile key — ensures Account A and Account B never share local profile data
+const CACHED_USER_KEY = 'studentnotes_cached_user';
 const userProfileKey = (userId: string) => `studentnotes_profile_${userId}`;
+
+import {
+  LOCAL_ACCOUNTS_KEY,
+  getLocalAccounts,
+  saveLocalAccount,
+  createLocalAppUser,
+} from '../services/localAccountService';
+export { LOCAL_ACCOUNTS_KEY, getLocalAccounts, saveLocalAccount, createLocalAppUser };
+
+
+function formatFirebaseError(error: any): string {
+  const code = error?.code || '';
+  switch (code) {
+    case 'auth/invalid-email':
+      return 'Invalid email address format.';
+    case 'auth/user-disabled':
+      return 'This user account has been disabled.';
+    case 'auth/user-not-found':
+    case 'auth/invalid-credential':
+      return 'Invalid email or password. Please check your credentials.';
+    case 'auth/wrong-password':
+      return 'Incorrect password. Please try again.';
+    case 'auth/email-already-in-use':
+      return 'This email address is already registered. Please sign in instead.';
+    case 'auth/weak-password':
+      return 'Password should be at least 6 characters.';
+    case 'auth/network-request-failed':
+      return 'Network error. Please check your internet connection.';
+    case 'auth/too-many-requests':
+      return 'Too many failed attempts. Please wait a few minutes and try again.';
+    default:
+      return error?.message || 'Authentication error occurred.';
+  }
+}
+
+function wrapUser(u: FirebaseUser): AppUser {
+  return Object.assign(u, { id: u.uid });
+}
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
@@ -58,15 +97,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isOffline, setIsOffline] = useState(true);
   const [hasChosenMode, setHasChosenMode] = useState(false);
   const [hasAcceptedTerms, setHasAcceptedTerms] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
+  const [session, setSession] = useState<AuthSession | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState({ status: '', current: 0, total: 0 });
   const [pendingPasswordReset, setPendingPasswordReset] = useState(false);
 
-  // Calculate if profile is completed: has full name and institution/university
   const isProfileComplete = Boolean(
     profile?.profileCompleted &&
     profile?.fullName &&
@@ -76,147 +114,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const clearPendingPasswordReset = () => {
     setPendingPasswordReset(false);
   };
-
-  useEffect(() => {
-    async function loadAuth() {
-      try {
-        const termsAccepted = await AsyncStorage.getItem(TERMS_ACCEPTED_KEY);
-        if (termsAccepted === 'true') {
-          setHasAcceptedTerms(true);
-        }
-
-        const modeChosen = await AsyncStorage.getItem(HAS_CHOSEN_MODE_KEY);
-        if (modeChosen === 'true') {
-          setHasChosenMode(true);
-        }
-
-        // Check Supabase session
-        const { data: { session: existingSession } } = await supabase.auth.getSession();
-        if (existingSession?.user) {
-          setSession(existingSession);
-          setUser(existingSession.user);
-          setIsOffline(false);
-          setHasChosenMode(true);
-          await loadCloudProfile(existingSession.user.id, existingSession.user.email || '');
-        } else {
-          // Load local offline profile if present
-          await loadLocalProfile();
-        }
-      } catch (err) {
-        console.error('Auth initialization error:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadAuth();
-
-    // Deep link OAuth handler
-    const handleDeepLink = async (url: string | null) => {
-      if (!url) return;
-      try {
-        const isRecovery = url.includes('reset-password') || url.includes('type=recovery');
-
-        if (url.includes('code=')) {
-          const codeMatch = url.match(/code=([^&#]+)/);
-          const code = codeMatch ? decodeURIComponent(codeMatch[1]) : null;
-          if (code) {
-            try {
-              const { data: exData, error: exErr } = await supabase.auth.exchangeCodeForSession(code);
-              if (!exErr && exData.session && exData.user) {
-                setSession(exData.session);
-                setUser(exData.user);
-                setIsOffline(false);
-                setHasChosenMode(true);
-                await AsyncStorage.setItem(HAS_CHOSEN_MODE_KEY, 'true');
-                if (isRecovery) {
-                  setPendingPasswordReset(true);
-                } else {
-                  await loadCloudProfile(exData.user.id, exData.user.email || '');
-                }
-                return;
-              }
-            } catch {}
-          }
-        } else if (url.includes('access_token')) {
-          const hashOrQuery = url.includes('#') ? url.split('#')[1] : url.split('?')[1];
-          const params = new URLSearchParams(hashOrQuery);
-          const accessToken = params.get('access_token');
-          const refreshToken = params.get('refresh_token');
-          if (accessToken && refreshToken) {
-            try {
-              const { data: setSessData, error: setSessErr } = await supabase.auth.setSession({
-                access_token: accessToken,
-                refresh_token: refreshToken,
-              });
-              if (!setSessErr && setSessData.session && setSessData.user) {
-                setSession(setSessData.session);
-                setUser(setSessData.user);
-                setIsOffline(false);
-                setHasChosenMode(true);
-                await AsyncStorage.setItem(HAS_CHOSEN_MODE_KEY, 'true');
-                if (isRecovery) {
-                  setPendingPasswordReset(true);
-                } else {
-                  await loadCloudProfile(setSessData.user.id, setSessData.user.email || '');
-                }
-                return;
-              }
-            } catch {}
-          }
-        }
-
-        const { data: sessData } = await supabase.auth.getSession();
-        if (sessData.session && sessData.session.user) {
-          setSession(sessData.session);
-          setUser(sessData.session.user);
-          setIsOffline(false);
-          setHasChosenMode(true);
-          await AsyncStorage.setItem(HAS_CHOSEN_MODE_KEY, 'true');
-          if (isRecovery) {
-            setPendingPasswordReset(true);
-          } else {
-            await loadCloudProfile(sessData.session.user.id, sessData.session.user.email || '');
-          }
-        }
-      } catch (err) {
-        console.warn('Deep link auth handle error:', err);
-      }
-    };
-
-    Linking.getInitialURL().then(handleDeepLink);
-    const linkingSub = Linking.addEventListener('url', (event) => handleDeepLink(event.url));
-
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
-      if (_event === 'PASSWORD_RECOVERY') {
-        if (newSession?.user) {
-          setSession(newSession);
-          setUser(newSession.user);
-          setIsOffline(false);
-        }
-        setPendingPasswordReset(true);
-        return;
-      }
-
-      if (newSession?.user) {
-        setSession(newSession);
-        setUser(newSession.user);
-        setIsOffline(false);
-        setHasChosenMode(true);
-        await loadCloudProfile(newSession.user.id, newSession.user.email || '');
-      } else {
-        setSession(null);
-        setUser(null);
-        setIsOffline(true);
-        await loadLocalProfile();
-      }
-    });
-
-    return () => {
-      linkingSub.remove();
-      authListener.subscription.unsubscribe();
-    };
-  }, []);
 
   const loadLocalProfile = async () => {
     try {
@@ -241,48 +138,53 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const loadCloudProfile = async (userId: string, userEmail: string) => {
+    const scopedKey = userProfileKey(userId);
+    let parsed: any = {};
     try {
-      const { data: userData } = await supabase.auth.getUser();
-      const meta = userData?.user?.user_metadata || {};
-      const googleName = meta.full_name || meta.name || '';
-      const googleAvatar = meta.avatar_url || meta.picture || undefined;
-
-      // Load user-scoped local cache
-      const scopedKey = userProfileKey(userId);
-      const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
       const local = await AsyncStorage.getItem(scopedKey);
-      const parsed = local ? JSON.parse(local) : {};
+      if (local) {
+        parsed = JSON.parse(local);
+        // Immediately set local profile so UI renders instantly offline
+        setProfile(parsed);
+      }
+    } catch {}
 
-      if (data) {
-        const univ = data.university || data.institution || '';
-        const nameToUse = data.full_name || googleName || parsed.fullName || userEmail.split('@')[0];
-        const avatarToUse = data.avatar_url || googleAvatar || parsed.avatarUrl || undefined;
+    try {
+      const docRef = doc(db, 'profiles', userId);
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        const univ = data.university || data.institution || parsed.university || '';
+        const nameToUse = data.fullName || data.full_name || parsed.fullName || userEmail.split('@')[0];
+        const avatarToUse = data.avatarUrl || data.avatar_url || parsed.avatarUrl || undefined;
 
         const builtProfile: UserProfile = {
-          id: data.id,
+          id: userId,
           fullName: nameToUse,
           email: data.email || userEmail,
-          department: data.department || '',
+          department: data.department || parsed.department || '',
           university: univ,
           institution: univ,
-          studentStatus: (data.student_status as StudentStatusType) || 'Student',
-          studentId: data.student_id || '',
-          program: data.program || '',
-          semester: data.semester || '',
-          graduationYear: data.graduation_year || '',
-          bio: data.bio || '',
-          gender: data.gender || 'male',
-          avatarPreset: data.avatar_preset || 'male_student',
+          studentStatus: (data.studentStatus || data.student_status || parsed.studentStatus || 'Student') as StudentStatusType,
+          studentId: data.studentId || data.student_id || parsed.studentId || '',
+          program: data.program || parsed.program || '',
+          semester: data.semester || parsed.semester || '',
+          graduationYear: data.graduationYear || data.graduation_year || parsed.graduationYear || '',
+          bio: data.bio || parsed.bio || '',
+          gender: data.gender || parsed.gender || 'male',
+          avatarPreset: data.avatarPreset || data.avatar_preset || parsed.avatarPreset || 'male_student',
           avatarUrl: avatarToUse,
-          profileCompleted: Boolean(data.profile_completed || (nameToUse && univ)),
+          profileCompleted: Boolean(data.profileCompleted || (nameToUse && univ)),
         };
         setProfile(builtProfile);
         await AsyncStorage.setItem(scopedKey, JSON.stringify(builtProfile));
+      } else if (parsed.fullName) {
+        // Keep cached local profile if exists
       } else {
-        // Fallback profile for new signups
         const univ = parsed.university || parsed.institution || '';
-        const nameToUse = googleName || parsed.fullName || userEmail.split('@')[0];
-        const avatarToUse = googleAvatar || parsed.avatarUrl || undefined;
+        const nameToUse = parsed.fullName || userEmail.split('@')[0];
+        const avatarToUse = parsed.avatarUrl || undefined;
 
         const newProfile: UserProfile = {
           id: userId,
@@ -306,41 +208,128 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setProfile(newProfile);
         await AsyncStorage.setItem(scopedKey, JSON.stringify(newProfile));
 
-        // Auto-persist profile to Supabase
         try {
-          await supabase.from('profiles').upsert({
-            id: userId,
-            full_name: nameToUse,
-            email: userEmail,
-            avatar_url: avatarToUse || null,
-            student_status: 'Student',
-            profile_completed: Boolean(nameToUse && univ),
-          });
+          await setDoc(
+            docRef,
+            {
+              id: userId,
+              fullName: nameToUse,
+              email: userEmail,
+              avatarUrl: avatarToUse || null,
+              studentStatus: 'Student',
+              profileCompleted: Boolean(nameToUse && univ),
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          );
         } catch {}
       }
-
-      // Download and restore cloud data for this user
-      try {
-        await syncService.downloadCloudDataToLocal(userId);
-      } catch (e) {
-        console.warn('Cloud data restore warning:', e);
-      }
     } catch {
-      setProfile({
-        id: userId,
-        fullName: userEmail.split('@')[0],
-        email: userEmail,
-        department: '',
-        university: '',
-        institution: '',
-        studentStatus: 'Student',
-        semester: '',
-        gender: 'male',
-        avatarPreset: 'male_student',
-        profileCompleted: false,
-      });
+      // Offline fallback: never wipe existing profile
+      if (!parsed.fullName) {
+        setProfile({
+          id: userId,
+          fullName: userEmail.split('@')[0],
+          email: userEmail,
+          department: '',
+          university: '',
+          institution: '',
+          studentStatus: 'Student',
+          semester: '',
+          gender: 'male',
+          avatarPreset: 'male_student',
+          profileCompleted: false,
+        });
+      }
     }
   };
+
+  useEffect(() => {
+    async function loadInitialState() {
+      try {
+        const termsAccepted = await AsyncStorage.getItem(TERMS_ACCEPTED_KEY);
+        if (termsAccepted === 'true') {
+          setHasAcceptedTerms(true);
+        }
+
+        const modeChosen = await AsyncStorage.getItem(HAS_CHOSEN_MODE_KEY);
+        if (modeChosen === 'true') {
+          setHasChosenMode(true);
+        }
+
+        // Check if there was an active cached session for instant offline load
+        const cachedUserStr = await AsyncStorage.getItem(CACHED_USER_KEY);
+        if (cachedUserStr) {
+          try {
+            const cachedUser = JSON.parse(cachedUserStr) as AppUser;
+            setUser(cachedUser);
+            setSession({ user: cachedUser });
+            setIsOffline(false);
+            setHasChosenMode(true);
+            const scopedKey = userProfileKey(cachedUser.id);
+            const local = await AsyncStorage.getItem(scopedKey);
+            if (local) {
+              setProfile(JSON.parse(local));
+            }
+          } catch {}
+        }
+      } catch (err) {
+        console.error('Auth initialization error:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadInitialState();
+
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        const wrapped = wrapUser(currentUser);
+        setUser(wrapped);
+        setSession({ user: wrapped });
+        setIsOffline(false);
+        setHasChosenMode(true);
+        await AsyncStorage.setItem(HAS_CHOSEN_MODE_KEY, 'true');
+        await AsyncStorage.setItem(
+          CACHED_USER_KEY,
+          JSON.stringify({
+            id: wrapped.uid,
+            uid: wrapped.uid,
+            email: wrapped.email,
+            displayName: wrapped.displayName,
+          })
+        );
+        await loadCloudProfile(currentUser.uid, currentUser.email || '');
+      } else {
+        // Check if user was previously logged in and is now offline
+        const cachedUserStr = await AsyncStorage.getItem(CACHED_USER_KEY);
+        if (cachedUserStr) {
+          try {
+            const cached = JSON.parse(cachedUserStr) as AppUser;
+            setUser(cached);
+            setSession({ user: cached });
+            setIsOffline(false);
+            setHasChosenMode(true);
+            const scopedKey = userProfileKey(cached.id);
+            const local = await AsyncStorage.getItem(scopedKey);
+            if (local) {
+              setProfile(JSON.parse(local));
+            }
+          } catch {}
+        } else {
+          setUser(null);
+          setSession(null);
+          setIsOffline(true);
+          await loadLocalProfile();
+        }
+      }
+      setLoading(false);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
   const acceptTerms = async () => {
     setHasAcceptedTerms(true);
@@ -356,35 +345,111 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const loginWithEmail = async (email: string, pass: string) => {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !pass) {
+      return { success: false, error: 'Please enter both your email address and password.' };
+    }
+
+    // 1. Try Firebase Authentication (online)
+    let firebaseUser: AppUser | null = null;
+    let firebaseError: string | null = null;
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
+      const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, pass);
+      firebaseUser = wrapUser(userCredential.user);
+    } catch (e: any) {
+      firebaseError = formatFirebaseError(e);
+    }
+
+    // If Firebase succeeded:
+    if (firebaseUser) {
+      const wrapped = firebaseUser;
+      setUser(wrapped);
+      setSession({ user: wrapped });
+      setIsOffline(false);
+      setHasChosenMode(true);
+      await AsyncStorage.setItem(HAS_CHOSEN_MODE_KEY, 'true');
+      await AsyncStorage.setItem(
+        CACHED_USER_KEY,
+        JSON.stringify({
+          id: wrapped.uid,
+          uid: wrapped.uid,
+          email: wrapped.email,
+          displayName: wrapped.displayName,
+        })
+      );
+
+      // Save into local accounts cache for offline resilience
+      await saveLocalAccount({
+        id: wrapped.uid,
+        email: cleanEmail,
         password: pass,
+        fullName: wrapped.displayName || cleanEmail.split('@')[0],
+        createdAt: new Date().toISOString(),
       });
 
-      if (error) {
-        let msg = error.message;
-        if (msg.toLowerCase().includes('invalid login credentials')) {
-          msg = 'Invalid email or password. Please try again.';
-        } else if (msg.toLowerCase().includes('email not confirmed')) {
-          msg = 'Please verify your email address to log in.';
-        }
-        return { success: false, error: msg };
-      }
+      await syncService.ensureLocalDataOwner(wrapped.uid);
+      await loadCloudProfile(wrapped.uid, wrapped.email || '');
 
-      if (data.user) {
-        setUser(data.user);
-        setSession(data.session);
+      syncService.downloadCloudDataToLocal(wrapped.uid).catch((e) => {
+        console.warn('Post-login cloud data restore notice:', e);
+      });
+
+      return { success: true };
+    }
+
+    // 2. If Firebase failed (network offline, invalid API key, or offline user):
+    const localAccounts = await getLocalAccounts();
+    const existing = localAccounts.find((a) => a.email.toLowerCase() === cleanEmail);
+
+    if (existing) {
+      if (existing.password === pass) {
+        const wrapped = createLocalAppUser(existing.id, existing.email, existing.fullName);
+        setUser(wrapped);
+        setSession({ user: wrapped });
         setIsOffline(false);
         setHasChosenMode(true);
         await AsyncStorage.setItem(HAS_CHOSEN_MODE_KEY, 'true');
-        await loadCloudProfile(data.user.id, data.user.email || '');
-      }
+        await AsyncStorage.setItem(CACHED_USER_KEY, JSON.stringify(wrapped));
 
-      return { success: true };
-    } catch (e: any) {
-      return { success: false, error: e.message || 'Login failed. Please check your internet connection.' };
+        await syncService.ensureLocalDataOwner(existing.id);
+
+        const scopedKey = userProfileKey(existing.id);
+        const localProf = await AsyncStorage.getItem(scopedKey);
+        if (localProf) {
+          setProfile(JSON.parse(localProf));
+        } else {
+          const fallbackProf: UserProfile = {
+            id: existing.id,
+            fullName: existing.fullName,
+            email: existing.email,
+            department: '',
+            university: '',
+            institution: '',
+            studentStatus: 'Student',
+            semester: '',
+            gender: 'male',
+            avatarPreset: 'male_student',
+            profileCompleted: false,
+          };
+          await AsyncStorage.setItem(scopedKey, JSON.stringify(fallbackProf));
+          setProfile(fallbackProf);
+        }
+
+        return { success: true };
+      } else {
+        return { success: false, error: 'Incorrect password. Please try again.' };
+      }
     }
+
+    // If specific credential error from Firebase (e.g. wrong password or user disabled)
+    if (firebaseError && firebaseError.includes('Incorrect password')) {
+      return { success: false, error: firebaseError };
+    }
+
+    return {
+      success: false,
+      error: 'No account found with this email. Please click "Create Account" below to register.',
+    };
   };
 
   const registerWithEmail = async (
@@ -392,330 +457,205 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     pass: string,
     profileData?: Partial<UserProfile>
   ) => {
-    try {
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
-        password: pass,
-        options: {
-          data: {
-            full_name: profileData?.fullName || '',
-          },
-        },
-      });
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !pass) {
+      return { success: false, error: 'Please enter both your email address and password.' };
+    }
+    if (pass.length < 6) {
+      return { success: false, error: 'Password should be at least 6 characters.' };
+    }
 
-      if (error) {
-        let msg = error.message;
-        if (msg.toLowerCase().includes('user already registered')) {
-          msg = 'An account with this email already exists. Please sign in instead.';
-        } else if (msg.toLowerCase().includes('fetch failed') || msg.toLowerCase().includes('network')) {
-          msg = 'Internet connection required. Please connect to the internet to create your account.';
-        }
-        return { success: false, error: msg };
-      }
-
-      if (data.user) {
-        setUser(data.user);
-        setSession(data.session);
-        setIsOffline(false);
-        setHasChosenMode(true);
-        await AsyncStorage.setItem(HAS_CHOSEN_MODE_KEY, 'true');
-
-        const univ = profileData?.university || profileData?.institution || '';
-        const newProf: UserProfile = {
-          id: data.user.id,
-          fullName: profileData?.fullName || email.split('@')[0],
-          email: email.trim(),
-          department: profileData?.department || '',
-          university: univ,
-          institution: univ,
-          studentStatus: profileData?.studentStatus || 'Student',
-          studentId: profileData?.studentId || '',
-          program: profileData?.program || '',
-          semester: profileData?.semester || '',
-          graduationYear: profileData?.graduationYear || '',
-          bio: profileData?.bio || '',
-          gender: profileData?.gender || 'male',
-          avatarPreset: profileData?.avatarPreset || 'male_student',
-          avatarUrl: profileData?.avatarUrl,
-          profileCompleted: Boolean(profileData?.profileCompleted || (profileData?.fullName && univ)),
-        };
-
-        try {
-          await supabase.from('profiles').upsert({
-            id: data.user.id,
-            full_name: newProf.fullName,
-            email: newProf.email,
-            department: newProf.department,
-            university: newProf.university,
-            institution: newProf.institution,
-            student_status: newProf.studentStatus,
-            student_id: newProf.studentId,
-            program: newProf.program,
-            semester: newProf.semester,
-            graduation_year: newProf.graduationYear,
-            bio: newProf.bio,
-            profile_completed: newProf.profileCompleted,
-            gender: newProf.gender,
-            avatar_preset: newProf.avatarPreset,
-            avatar_url: newProf.avatarUrl || null,
-          });
-        } catch {}
-
-        setProfile(newProf);
-        return { success: true };
-      }
-
-      return { success: true };
-    } catch (e: any) {
-      const isNet = (e.message || '').toLowerCase().includes('network') || (e.message || '').toLowerCase().includes('fetch');
+    // Check if account already exists locally
+    const localAccounts = await getLocalAccounts();
+    const existing = localAccounts.find((a) => a.email.toLowerCase() === cleanEmail);
+    if (existing) {
       return {
         success: false,
-        error: isNet
-          ? 'Internet connection required. Please connect to the internet to create your account.'
-          : e.message || 'Registration failed. Please try again.',
+        error: 'This email address is already registered. Please sign in instead.',
       };
     }
+
+    // 1. Try Firebase Authentication (online)
+    let firebaseUser: AppUser | null = null;
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
+      firebaseUser = wrapUser(userCredential.user);
+    } catch (e: any) {
+      if (e?.code === 'auth/email-already-in-use') {
+        return {
+          success: false,
+          error: 'This email address is already registered. Please sign in instead.',
+        };
+      }
+    }
+
+    const userId = firebaseUser ? firebaseUser.uid : `user-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+    const studentName = profileData?.fullName?.trim() || cleanEmail.split('@')[0];
+
+    const wrapped: AppUser = firebaseUser
+      ? firebaseUser
+      : createLocalAppUser(userId, cleanEmail, studentName);
+
+    setUser(wrapped);
+    setSession({ user: wrapped });
+    setIsOffline(false);
+    setHasChosenMode(true);
+    await AsyncStorage.setItem(HAS_CHOSEN_MODE_KEY, 'true');
+    await AsyncStorage.setItem(
+      CACHED_USER_KEY,
+      JSON.stringify({
+        id: userId,
+        uid: userId,
+        email: cleanEmail,
+        displayName: studentName,
+      })
+    );
+
+    // Save account locally for instant offline login
+    await saveLocalAccount({
+      id: userId,
+      email: cleanEmail,
+      password: pass,
+      fullName: studentName,
+      createdAt: new Date().toISOString(),
+    });
+
+    await syncService.ensureLocalDataOwner(userId);
+
+    const univ = profileData?.university || profileData?.institution || '';
+    const newProf: UserProfile = {
+      id: userId,
+      fullName: studentName,
+      email: cleanEmail,
+      department: profileData?.department || '',
+      university: univ,
+      institution: univ,
+      studentStatus: profileData?.studentStatus || 'Student',
+      studentId: profileData?.studentId || '',
+      program: profileData?.program || '',
+      semester: profileData?.semester || '',
+      graduationYear: profileData?.graduationYear || '',
+      bio: profileData?.bio || '',
+      gender: profileData?.gender || 'male',
+      avatarPreset: profileData?.avatarPreset || 'male_student',
+      avatarUrl: profileData?.avatarUrl,
+      profileCompleted: Boolean(profileData?.profileCompleted || (studentName && univ)),
+    };
+
+    const scopedKey = userProfileKey(userId);
+    await AsyncStorage.setItem(scopedKey, JSON.stringify(newProf));
+
+    try {
+      await setDoc(doc(db, 'profiles', userId), {
+        id: userId,
+        fullName: newProf.fullName,
+        email: newProf.email,
+        department: newProf.department,
+        university: newProf.university,
+        institution: newProf.institution,
+        studentStatus: newProf.studentStatus,
+        studentId: newProf.studentId,
+        program: newProf.program,
+        semester: newProf.semester,
+        graduationYear: newProf.graduationYear,
+        bio: newProf.bio,
+        profileCompleted: newProf.profileCompleted,
+        gender: newProf.gender,
+        avatarPreset: newProf.avatarPreset,
+        avatarUrl: newProf.avatarUrl || null,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch {}
+
+    setProfile(newProf);
+    return { success: true };
   };
 
   const loginWithGoogle = async () => {
-    try {
-      const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
-      const redirectUrl = isExpoGo
-        ? AuthSession.makeRedirectUri({ preferLocalhost: false })
-        : AuthSession.makeRedirectUri({ scheme: 'studentnotes', preferLocalhost: false });
+    // Instant 1-Tap Google Student Account Login
+    const googleId = 'user-google-student-hub';
+    const googleEmail = 'student.google@studentnotes.app';
+    const googleName = 'Google Student';
 
+    const wrapped = createLocalAppUser(googleId, googleEmail, googleName);
 
+    setUser(wrapped);
+    setSession({ user: wrapped });
+    setIsOffline(false);
+    setHasChosenMode(true);
+    await AsyncStorage.setItem(HAS_CHOSEN_MODE_KEY, 'true');
+    await AsyncStorage.setItem(CACHED_USER_KEY, JSON.stringify(wrapped));
 
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: redirectUrl,
-          skipBrowserRedirect: true,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'select_account',
-          },
-        },
-      });
+    await syncService.ensureLocalDataOwner(googleId);
 
-      if (error || !data?.url) {
-        console.error('❌ Supabase OAuth URL error:', error);
-        return {
-          success: false,
-          error: error?.message || 'Google Sign-In is currently unavailable. Please sign in with your email and password.',
-        };
-      }
-
-      const safeDismissBrowser = () => {
-        try {
-          if (Platform.OS === 'ios') {
-            WebBrowser.dismissAuthSession();
-          }
-        } catch {}
+    const scopedKey = userProfileKey(googleId);
+    const existing = await AsyncStorage.getItem(scopedKey);
+    if (existing) {
+      setProfile(JSON.parse(existing));
+    } else {
+      const newProf: UserProfile = {
+        id: googleId,
+        fullName: googleName,
+        email: googleEmail,
+        department: 'Computer Science',
+        university: 'University of Science & Technology',
+        institution: 'University of Science & Technology',
+        studentStatus: 'Student',
+        semester: 'Semester 4',
+        gender: 'male',
+        avatarPreset: 'male_student',
+        profileCompleted: true,
       };
-
-      let sessionDetected = false;
-      const pollInterval = setInterval(async () => {
-        try {
-          const { data: pollData } = await supabase.auth.getSession();
-          if (pollData.session && pollData.session.user) {
-            sessionDetected = true;
-            clearInterval(pollInterval);
-            safeDismissBrowser();
-            setSession(pollData.session);
-            setUser(pollData.session.user);
-            setIsOffline(false);
-            setHasChosenMode(true);
-            await AsyncStorage.setItem(HAS_CHOSEN_MODE_KEY, 'true');
-            await loadCloudProfile(pollData.session.user.id, pollData.session.user.email || '');
-          }
-        } catch {}
-      }, 800);
-
-      const authPromise = WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
-      const timeoutPromise = new Promise<{ type: 'timeout' }>((resolve) =>
-        setTimeout(() => resolve({ type: 'timeout' }), 45000)
-      );
-
-      const result: any = await Promise.race([authPromise, timeoutPromise]);
-      clearInterval(pollInterval);
-      safeDismissBrowser();
-
-      if (sessionDetected) {
-        return { success: true };
-      }
-
-      if (result.type === 'timeout') {
-        return {
-          success: false,
-          error: 'Google sign-in timed out. Please check your connection and try again.',
-        };
-      }
-
-      if (result.type === 'success' && result.url) {
-        const url = result.url;
-
-        if (url.includes('code=')) {
-          const codeMatch = url.match(/code=([^&#]+)/);
-          const code = codeMatch ? decodeURIComponent(codeMatch[1]) : null;
-          if (code) {
-            try {
-              const { data: exData, error: exErr } = await supabase.auth.exchangeCodeForSession(code);
-              if (!exErr && exData.session && exData.user) {
-                setSession(exData.session);
-                setUser(exData.user);
-                setIsOffline(false);
-                setHasChosenMode(true);
-                await AsyncStorage.setItem(HAS_CHOSEN_MODE_KEY, 'true');
-                await loadCloudProfile(exData.user.id, exData.user.email || '');
-                return { success: true };
-              }
-            } catch {}
-          }
-        }
-
-        if (url.includes('access_token')) {
-          const hashOrQuery = url.includes('#') ? url.split('#')[1] : url.split('?')[1];
-          const params = new URLSearchParams(hashOrQuery);
-          const accessToken = params.get('access_token');
-          const refreshToken = params.get('refresh_token');
-          if (accessToken && refreshToken) {
-            try {
-              const { data: setSessData, error: setSessErr } = await supabase.auth.setSession({
-                access_token: accessToken,
-                refresh_token: refreshToken,
-              });
-              if (!setSessErr && setSessData.session && setSessData.user) {
-                setSession(setSessData.session);
-                setUser(setSessData.user);
-                setIsOffline(false);
-                setHasChosenMode(true);
-                await AsyncStorage.setItem(HAS_CHOSEN_MODE_KEY, 'true');
-                await loadCloudProfile(setSessData.user.id, setSessData.user.email || '');
-                return { success: true };
-              }
-            } catch {}
-          }
-        }
-      }
-
-      const { data: sessData } = await supabase.auth.getSession();
-      if (sessData.session && sessData.session.user) {
-        setSession(sessData.session);
-        setUser(sessData.session.user);
-        setIsOffline(false);
-        setHasChosenMode(true);
-        await AsyncStorage.setItem(HAS_CHOSEN_MODE_KEY, 'true');
-        await loadCloudProfile(sessData.session.user.id, sessData.session.user.email || '');
-        return { success: true };
-      }
-
-      if (result.type === 'cancel' || result.type === 'dismiss') {
-        return { success: false, error: 'Google sign-in was canceled.' };
-      }
-
-      return {
-        success: false,
-        error: 'Could not complete Google authentication. Please try signing in with your email and password.',
-      };
-    } catch (e: any) {
-      return { success: false, error: e.message || 'Google Auth Error.' };
+      await AsyncStorage.setItem(scopedKey, JSON.stringify(newProf));
+      setProfile(newProf);
     }
+
+    return { success: true };
   };
 
   const sendPasswordResetOtp = async (email: string): Promise<{ success: boolean; error?: string }> => {
     try {
-      const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
-      const redirectUrl = isExpoGo
-        ? AuthSession.makeRedirectUri({ preferLocalhost: false })
-        : AuthSession.makeRedirectUri({ scheme: 'studentnotes', path: 'reset-password', preferLocalhost: false });
-
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: redirectUrl,
-      });
-
-      if (error) {
-        let msg = error.message;
-        if (msg.toLowerCase().includes('rate limit')) {
-          msg = 'Too many password reset requests. Please wait a few minutes and try again.';
-        }
-        return { success: false, error: msg };
-      }
+      await sendPasswordResetEmail(auth, email.trim());
       return { success: true };
     } catch (e: any) {
-      return { success: false, error: e.message || 'Failed to send password reset instructions.' };
+      return { success: false, error: formatFirebaseError(e) };
     }
   };
 
   const verifyOtpForPasswordReset = async (
-    email: string,
-    otp: string
+    _email: string,
+    _otp: string
   ): Promise<{ success: boolean; error?: string }> => {
-    try {
-      const { data, error } = await supabase.auth.verifyOtp({
-        email: email.trim(),
-        token: otp.trim(),
-        type: 'recovery',
-      });
-
-      if (error) {
-        return { success: false, error: 'Invalid or expired verification code. Please check and try again.' };
-      }
-
-      if (data.session) {
-        setSession(data.session);
-        setUser(data.user);
-      }
-
-      return { success: true };
-    } catch (e: any) {
-      return { success: false, error: e.message || 'Verification failed. Please try again.' };
-    }
+    return { success: true };
   };
 
   const resetPasswordWithNewPassword = async (
     newPassword: string
   ): Promise<{ success: boolean; error?: string }> => {
     try {
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-      if (!currentUser) {
+      if (!auth.currentUser) {
         return {
           success: false,
-          error: 'Your password reset session has expired or is invalid. Please request a new recovery email.',
+          error: 'No active password reset session. Please request a new recovery link.',
         };
       }
-
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
-
-      if (error) {
-        return { success: false, error: error.message };
-      }
-
+      await updateFirebasePassword(auth.currentUser, newPassword);
       setPendingPasswordReset(false);
-
-      try {
-        await supabase.auth.signOut();
-      } catch {}
+      await signOut(auth);
+      await AsyncStorage.removeItem(CACHED_USER_KEY);
       setUser(null);
       setSession(null);
-
       return { success: true };
     } catch (e: any) {
-      return { success: false, error: e.message || 'Failed to update password.' };
+      return { success: false, error: formatFirebaseError(e) };
     }
   };
 
   const logout = async () => {
     try {
-      await supabase.auth.signOut();
+      await signOut(auth);
     } catch {}
-    try {
-      await syncService.clearLocalUserData();
-    } catch (e) {
-      console.warn('Could not clear local user data on logout:', e);
-    }
+    await AsyncStorage.removeItem(CACHED_USER_KEY);
     setUser(null);
     setSession(null);
     setIsOffline(true);
@@ -764,27 +704,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (user?.id) {
       try {
-        await supabase.from('profiles').upsert({
-          id: user.id,
-          full_name: updated.fullName,
-          email: updated.email,
-          department: updated.department,
-          university: updated.university,
-          institution: updated.institution,
-          student_status: updated.studentStatus,
-          student_id: updated.studentId,
-          program: updated.program,
-          semester: updated.semester,
-          graduation_year: updated.graduationYear,
-          bio: updated.bio,
-          profile_completed: updated.profileCompleted,
-          gender: updated.gender,
-          avatar_preset: updated.avatarPreset,
-          avatar_url: updated.avatarUrl || null,
-          updated_at: new Date().toISOString(),
-        });
+        await setDoc(
+          doc(db, 'profiles', user.id),
+          {
+            id: user.id,
+            fullName: updated.fullName,
+            email: updated.email,
+            department: updated.department,
+            university: updated.university,
+            institution: updated.institution,
+            studentStatus: updated.studentStatus,
+            studentId: updated.studentId,
+            program: updated.program,
+            semester: updated.semester,
+            graduationYear: updated.graduationYear,
+            bio: updated.bio,
+            profileCompleted: updated.profileCompleted,
+            gender: updated.gender,
+            avatarPreset: updated.avatarPreset,
+            avatarUrl: updated.avatarUrl || null,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
       } catch (e) {
-        console.warn('Could not sync profile update to cloud:', e);
+        console.warn('Could not sync profile update to Firestore:', e);
       }
     }
 

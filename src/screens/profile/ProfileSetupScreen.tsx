@@ -122,7 +122,7 @@ export const ProfileSetupScreen: React.FC<Props> = ({ navigation, route }) => {
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: theme.colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
     >
       <AppHeader
@@ -132,8 +132,9 @@ export const ProfileSetupScreen: React.FC<Props> = ({ navigation, route }) => {
       />
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: 160 }]}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
       >
         <Text style={[theme.typography.h2, { color: theme.colors.text, marginTop: 8 }]}>
@@ -294,7 +295,7 @@ export const ProfileSetupScreen: React.FC<Props> = ({ navigation, route }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scrollContent: { padding: 20, paddingBottom: 60 },
+  scrollContent: { padding: 20, paddingBottom: 160 },
   sectionDivider: {
     marginVertical: 12,
   },

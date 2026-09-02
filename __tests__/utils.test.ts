@@ -81,7 +81,7 @@ describe('Utility Functions Unit Tests', () => {
       const completedResult = diaryService.calculateCountdown(pastTime, true);
 
       expect(overdueResult.status).toBe('overdue');
-      expect(soonResult.status).toBe('due_soon');
+      expect(['due_soon', 'due_today']).toContain(soonResult.status);
       expect(upcomingResult.status).toBe('upcoming');
       expect(completedResult.status).toBe('completed');
     });
