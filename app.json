@@ -71,7 +71,10 @@
     "extra": {
       "eas": {
         "projectId": "26b9a18b-db4f-4ee8-8e48-dc2cba7509a4"
-      }
+      },
+      "googleWebClientId": "985785236495-gl6p4po49k7oqpksc0fe7jcasf1u8t01.apps.googleusercontent.com",
+      "googleAndroidClientId": "985785236495-oln2vrjnsjtfsf7cojgob8vr49l3h02q.apps.googleusercontent.com",
+      "firebaseProjectId": "studentnotes-6a97c"
     }
   }
 }

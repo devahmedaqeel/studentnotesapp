@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Platform, Alert } from 'react-native';
 import * as Google from 'expo-auth-session/providers/google';
+import { exchangeCodeAsync } from 'expo-auth-session';
 import { GoogleAuthProvider } from 'firebase/auth';
 import { authService } from '../services/authService';
 import { useAuth, AuthResponseResult } from '../context/AuthContext';
@@ -18,6 +19,7 @@ export function useGoogleAuth(): UseGoogleAuthResult {
   const { completeGoogleSignIn } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isAuthenticatingRef = useRef(false);
 
   const rawWebClientId = authConfig.google.webClientId || undefined;
   const rawAndroidClientId = authConfig.google.androidClientId || undefined;
@@ -42,13 +44,14 @@ export function useGoogleAuth(): UseGoogleAuthResult {
     setError(null);
   }, []);
 
-  // Handle redirect response on native if promptAsync doesn't resolve immediately
+  // Handle redirect response on native if promptAsync doesn't resolve directly
   useEffect(() => {
-    if (!response) return;
+    if (!response || isAuthenticatingRef.current) return;
 
     if (response.type === 'success') {
       const idToken = response.params.id_token || (response as any).authentication?.idToken;
       if (idToken) {
+        isAuthenticatingRef.current = true;
         setLoading(true);
         const credential = GoogleAuthProvider.credential(idToken);
         authService
@@ -67,6 +70,7 @@ export function useGoogleAuth(): UseGoogleAuthResult {
             setError(e?.message || 'Google sign-in could not be completed.');
           })
           .finally(() => {
+            isAuthenticatingRef.current = false;
             setLoading(false);
           });
       }
@@ -122,7 +126,30 @@ export function useGoogleAuth(): UseGoogleAuthResult {
       const promptRes = await promptAsync();
 
       if (promptRes.type === 'success') {
-        const idToken = promptRes.params.id_token || (promptRes as any).authentication?.idToken;
+        let idToken = promptRes.params.id_token || (promptRes as any).authentication?.idToken;
+
+        // If native platform returned an authorization code, exchange it directly
+        if (!idToken && promptRes.params?.code) {
+          try {
+            const tokenRes = await exchangeCodeAsync(
+              {
+                clientId: Platform.OS === 'android' ? androidClientId : webClientId,
+                code: promptRes.params.code,
+                redirectUri: request?.redirectUri || '',
+                extraParams: {
+                  code_verifier: request?.codeVerifier || '',
+                },
+              },
+              {
+                tokenEndpoint: 'https://oauth2.googleapis.com/token',
+              }
+            );
+            idToken = tokenRes.idToken;
+          } catch (exchangeErr: any) {
+            console.warn('Direct code exchange notice:', exchangeErr?.message || exchangeErr);
+          }
+        }
+
         if (!idToken) {
           setLoading(false);
           const err = 'Google sign-in succeeded but no ID token was returned.';
@@ -130,16 +157,19 @@ export function useGoogleAuth(): UseGoogleAuthResult {
           return { success: false, error: err };
         }
 
+        isAuthenticatingRef.current = true;
         const credential = GoogleAuthProvider.credential(idToken);
         const authRes = await authService.signInWithGoogleCredential(credential);
 
         if (!authRes.success || !authRes.user) {
+          isAuthenticatingRef.current = false;
           setLoading(false);
           setError(authRes.error || 'Failed to authenticate with Firebase.');
           return { success: false, error: authRes.error };
         }
 
         const profileRes = await completeGoogleSignIn(authRes.user);
+        isAuthenticatingRef.current = false;
         setLoading(false);
         if (!profileRes.success && profileRes.error) {
           setError(profileRes.error);
@@ -161,12 +191,13 @@ export function useGoogleAuth(): UseGoogleAuthResult {
       setError(errMsg);
       return { success: false, error: errMsg };
     } catch (e: any) {
+      isAuthenticatingRef.current = false;
       setLoading(false);
       const msg = e?.message || 'Unable to complete Google sign-in. Please try again.';
       setError(msg);
       return { success: false, error: msg };
     }
-  }, [promptAsync, completeGoogleSignIn, rawWebClientId, rawAndroidClientId]);
+  }, [promptAsync, completeGoogleSignIn, rawWebClientId, rawAndroidClientId, androidClientId, webClientId, request]);
 
   return {
     signInWithGoogle,

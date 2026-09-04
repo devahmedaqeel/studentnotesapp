@@ -22,8 +22,7 @@ android/local.properties
 ios/build/
 ios/Pods/
 
-# Environment secret files
-.env
+# Environment secret files (allow .env for EAS builds; keep local overrides ignored)
 .env.local
 .env.development.local
 .env.test.local

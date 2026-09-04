@@ -184,4 +184,25 @@ describe('Production Google Authentication System Tests', () => {
       expect(stored1.id).not.toBe(stored2.id);
     });
   });
+
+  describe('5. Standalone APK & Production Environment Fallbacks', () => {
+    test('guarantees valid Google OAuth client IDs even without .env file', () => {
+      const { authConfig } = require('../src/constants/authConfig');
+      expect(authConfig.google.webClientId).toBeTruthy();
+      expect(authConfig.google.webClientId).toContain('.apps.googleusercontent.com');
+      expect(authConfig.google.androidClientId).toBeTruthy();
+      expect(authConfig.google.androidClientId).toContain('.apps.googleusercontent.com');
+      expect(authConfig.google.packageName).toBe('com.studentnotes.app');
+      expect(authConfig.google.isConfigured()).toBe(true);
+    });
+
+    test('guarantees valid Firebase configuration fallback for standalone release APKs', () => {
+      const { firebaseConfig } = require('../src/services/firebase');
+      expect(firebaseConfig.apiKey).toBeTruthy();
+      expect(firebaseConfig.projectId).toBe('studentnotes-6a97c');
+      expect(firebaseConfig.authDomain).toBe('studentnotes-6a97c.firebaseapp.com');
+      expect(firebaseConfig.storageBucket).toBe('studentnotes-6a97c.firebasestorage.app');
+      expect(firebaseConfig.appId).toBeTruthy();
+    });
+  });
 });
