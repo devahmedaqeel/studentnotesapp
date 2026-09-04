@@ -63,19 +63,26 @@ Open [Google Cloud Console Credentials](https://console.cloud.google.com/apis/cr
 
 ---
 
-## 4. Production / Release APK Keystore Setup (EAS Build)
+## 4. Production / Release APK Keystore & EAS Build Setup
 
 When building a release APK via EAS (`npm run build:apk` or `eas build -p android --profile preview`):
-1. Run `eas credentials` in the terminal to inspect your production keystore fingerprints.
-2. Add a second **Android OAuth client ID** in Google Cloud Console using:
+1. **Production Keystore Fingerprints**: Run `eas credentials` in the terminal to inspect your production keystore fingerprints.
+2. **Google Cloud Console Android Client**: Add a second **Android OAuth client ID** in Google Cloud Console using:
    - **Package name**: `com.studentnotes.app`
    - **SHA-1 certificate fingerprint**: The SHA-1 provided by EAS build credentials or your Google Play App Signing key.
+3. **EAS Build Environment Variables**:
+   - `eas.json` is pre-configured with the full `env` map across `development`, `preview`, and `production` profiles.
+   - `.easignore` preserves `.env` configurations during cloud bundling.
+4. **Android Intent-Filter Callbacks**:
+   `android/app/src/main/AndroidManifest.xml` registers both `studentnotes` and `com.studentnotes.app` schemes so browser redirects return smoothly to `MainActivity`.
+5. **Direct Code Exchange**:
+   Native Android authorization codes are automatically exchanged for ID tokens using `exchangeCodeAsync` via `expo-auth-session`.
 
 ---
 
-## 5. Environment Variables (`.env`)
+## 5. Environment Variables & Production Fallbacks
 
-Add the Google OAuth Client IDs to your `.env` file:
+Client IDs can be configured in your `.env` file:
 
 ```env
 # Firebase Secrets
@@ -87,11 +94,16 @@ EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=985785236495
 EXPO_PUBLIC_FIREBASE_APP_ID=1:985785236495:web:249c32fcac96a792afb77a
 EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID=G-4T05VTNLBL
 
-# Google OAuth Client IDs
-EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=your-web-client-id.apps.googleusercontent.com
-EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=your-android-client-id.apps.googleusercontent.com
-EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=your-ios-client-id.apps.googleusercontent.com
+# Google OAuth 2.0 Client IDs
+EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=985785236495-gl6p4po49k7oqpksc0fe7jcasf1u8t01.apps.googleusercontent.com
+EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=985785236495-oln2vrjnsjtfsf7cojgob8vr49l3h02q.apps.googleusercontent.com
 ```
+
+### Production Fallback Layer
+To eliminate setup alerts on newly installed standalone APKs, fallback constants are embedded directly in code:
+- **`src/constants/authConfig.ts`**: Fallbacks to `DEFAULT_GOOGLE_WEB_CLIENT_ID` and `DEFAULT_GOOGLE_ANDROID_CLIENT_ID`.
+- **`src/services/firebase.ts`**: Fallbacks to verified project keys.
+- **`app.json`**: Client IDs mirrored in `expo.extra`.
 
 ---
 

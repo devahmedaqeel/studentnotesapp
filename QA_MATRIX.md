@@ -16,6 +16,7 @@
 | AUTH-11 | Auth | Session Persistence | App restart after login | Session maintained, user remains logged in. | PASS | CRITICAL |
 | AUTH-12 | Auth | Network Interruption | Login with poor/no network | App shows appropriate error, doesn't crash. | PASS | HIGH |
 | AUTH-13 | Profile | Profile Completion | Complete profile setup | Profile marked as complete, navigation proceeds correctly. | PASS | MEDIUM |
+| AUTH-14 | Auth | Standalone APK Fallbacks | Launch & sign in without .env | Fallback client IDs prevent setup warnings; OAuth redirect captured. | PASS | CRITICAL |
 
 ## 2. Sync & Offline Mode
 | ID | Module | Feature | Test Case | Expected Result | Status | Severity |
@@ -96,7 +97,7 @@
 | PERF-03 | Performance | Scroll Performance | Long lists | 60fps smooth scrolling in all list views. | PASS | MEDIUM |
 | PERF-04 | Performance | Large Datasets | 100+ notes, 50+ PDFs, 100+ links | App remains responsive with substantial local database records. | PASS | HIGH |
 | PERF-05 | Theme | Dark & Light Modes | System theme toggle | Clean UI rendering and palette adaptation across all screens. | PASS | HIGH |
-| PERF-06 | Quality | Test Suite | Jest automated suite | 100% test pass rate across all 9 test suites (94/94 passed). | PASS | CRITICAL |
+| PERF-06 | Quality | Test Suite | Jest automated suite | 100% test pass rate across all 10 test suites (109/109 passed). | PASS | CRITICAL |
 
 ## 8. Build, Release & Packaging
 | ID | Module | Feature | Test Case | Expected Result | Status | Severity |

@@ -179,7 +179,7 @@ npm start
 ### Environment Variables (`.env`)
 
 ```env
-# Firebase Configuration (Get from Firebase Console -> Project Settings)
+# Firebase Configuration
 EXPO_PUBLIC_FIREBASE_API_KEY=your-firebase-api-key
 EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project-id.firebaseapp.com
 EXPO_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
@@ -187,7 +187,14 @@ EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project-id.firebasestorage.app
 EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your-messaging-sender-id
 EXPO_PUBLIC_FIREBASE_APP_ID=your-firebase-app-id
 EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID=your-measurement-id
+
+# Google OAuth 2.0 Client IDs
+EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=your-web-client-id.apps.googleusercontent.com
+EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=your-android-client-id.apps.googleusercontent.com
 ```
+
+> [!NOTE]
+> **Built-in Production Fallbacks**: For standalone Android APK builds, verified project defaults are embedded directly in [`src/constants/authConfig.ts`](src/constants/authConfig.ts), [`src/services/firebase.ts`](src/services/firebase.ts), and [`eas.json`](eas.json). The app remains fully operational even if `.env` is omitted in cloud build environments.
 
 ---
 
@@ -196,7 +203,7 @@ EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID=your-measurement-id
 All tests and type validations run in CI/CD and local environments:
 
 ```bash
-# Run unit & integration test suites (9 test suites, 94 tests)
+# Run unit & integration test suites (10 test suites, 109 tests)
 npm test
 
 # Run TypeScript type verification
