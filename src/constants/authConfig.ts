@@ -1,19 +1,14 @@
 import { Platform } from 'react-native';
 
-export const DEFAULT_GOOGLE_WEB_CLIENT_ID =
-  '985785236495-gl6p4po49k7oqpksc0fe7jcasf1u8t01.apps.googleusercontent.com';
-export const DEFAULT_GOOGLE_ANDROID_CLIENT_ID =
-  '985785236495-oln2vrjnsjtfsf7cojgob8vr49l3h02q.apps.googleusercontent.com';
-
 /**
  * Centralized Authentication & OAuth Configuration Layer.
  * Consolidates client IDs, package identifiers, scheme, and authorized endpoints.
  */
 export const authConfig = {
-  // Google OAuth Client IDs from Environment Variables with reliable production fallbacks
+  // Google OAuth Client IDs from Environment Variables
   google: {
-    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || DEFAULT_GOOGLE_WEB_CLIENT_ID,
-    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || DEFAULT_GOOGLE_ANDROID_CLIENT_ID,
+    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '',
+    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || '',
     iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || '',
     
     // Application Identifiers
@@ -32,6 +27,9 @@ export const authConfig = {
         return true;
       }
       return Boolean(
+        process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
+        process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ||
+        process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ||
         authConfig.google.webClientId ||
         authConfig.google.androidClientId ||
         authConfig.google.iosClientId

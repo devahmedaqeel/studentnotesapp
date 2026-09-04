@@ -193,8 +193,8 @@ EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=your-web-client-id.apps.googleusercontent.com
 EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=your-android-client-id.apps.googleusercontent.com
 ```
 
-> [!NOTE]
-> **Built-in Production Fallbacks**: For standalone Android APK builds, verified project defaults are embedded directly in [`src/constants/authConfig.ts`](src/constants/authConfig.ts), [`src/services/firebase.ts`](src/services/firebase.ts), and [`eas.json`](eas.json). The app remains fully operational even if `.env` is omitted in cloud build environments.
+> [!TIP]
+> **Security Best Practices**: All credentials and API keys are strictly loaded through environment variables (`.env`). The `.env` file is excluded from git tracking via `.gitignore` to prevent secret leakage. For cloud APK builds via EAS, use local `.env` with `.easignore` or configure secrets securely via [EAS Environment Secrets](https://docs.expo.dev/build-reference/variables/).
 
 ---
 
@@ -203,7 +203,7 @@ EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=your-android-client-id.apps.googleuserconte
 All tests and type validations run in CI/CD and local environments:
 
 ```bash
-# Run unit & integration test suites (10 test suites, 109 tests)
+# Run unit & integration test suites (10 test suites, 110 tests)
 npm test
 
 # Run TypeScript type verification

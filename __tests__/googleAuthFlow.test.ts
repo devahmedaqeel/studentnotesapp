@@ -185,24 +185,34 @@ describe('Production Google Authentication System Tests', () => {
     });
   });
 
-  describe('5. Standalone APK & Production Environment Fallbacks', () => {
-    test('guarantees valid Google OAuth client IDs even without .env file', () => {
+  describe('5. Environment Variable Configuration & Package Validation', () => {
+    test('validates package identifier and OAuth scheme configuration', () => {
       const { authConfig } = require('../src/constants/authConfig');
-      expect(authConfig.google.webClientId).toBeTruthy();
-      expect(authConfig.google.webClientId).toContain('.apps.googleusercontent.com');
-      expect(authConfig.google.androidClientId).toBeTruthy();
-      expect(authConfig.google.androidClientId).toContain('.apps.googleusercontent.com');
       expect(authConfig.google.packageName).toBe('com.studentnotes.app');
-      expect(authConfig.google.isConfigured()).toBe(true);
+      expect(authConfig.google.bundleIdentifier).toBe('com.studentnotes.app');
+      expect(authConfig.google.scheme).toBe('studentnotes');
+      expect(authConfig.google.debugSha1).toBeTruthy();
     });
 
-    test('guarantees valid Firebase configuration fallback for standalone release APKs', () => {
+    test('correctly detects configured state from environment variables', () => {
+      const originalEnv = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+      try {
+        process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID = 'test-client-id.apps.googleusercontent.com';
+        const { authConfig } = require('../src/constants/authConfig');
+        expect(typeof authConfig.google.isConfigured).toBe('function');
+        expect(authConfig.google.isConfigured()).toBe(true);
+      } finally {
+        process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID = originalEnv;
+      }
+    });
+
+    test('validates Firebase configuration mapping structure', () => {
       const { firebaseConfig } = require('../src/services/firebase');
-      expect(firebaseConfig.apiKey).toBeTruthy();
-      expect(firebaseConfig.projectId).toBe('studentnotes-6a97c');
-      expect(firebaseConfig.authDomain).toBe('studentnotes-6a97c.firebaseapp.com');
-      expect(firebaseConfig.storageBucket).toBe('studentnotes-6a97c.firebasestorage.app');
-      expect(firebaseConfig.appId).toBeTruthy();
+      expect(firebaseConfig).toHaveProperty('apiKey');
+      expect(firebaseConfig).toHaveProperty('authDomain');
+      expect(firebaseConfig).toHaveProperty('projectId');
+      expect(firebaseConfig).toHaveProperty('storageBucket');
+      expect(firebaseConfig).toHaveProperty('appId');
     });
   });
 });

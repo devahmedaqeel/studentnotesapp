@@ -55,11 +55,8 @@ Open [Google Cloud Console Credentials](https://console.cloud.google.com/apis/cr
 2. Select Application type: **Android**.
 3. Name: `Student Notes Android Debug`.
 4. **Package name**: `com.studentnotes.app`
-5. **SHA-1 certificate fingerprint**:
-   ```
-   5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25
-   ```
-6. **Created Client ID**: `985785236495-oln2vrjnsjtfsf7cojgob8vr49l3h02q.apps.googleusercontent.com`
+5. **SHA-1 certificate fingerprint**: Add your development / debug keystore SHA-1.
+6. **Created Client ID**: Copy the generated client ID to your local private `.env` file.
 
 ---
 
@@ -70,9 +67,10 @@ When building a release APK via EAS (`npm run build:apk` or `eas build -p androi
 2. **Google Cloud Console Android Client**: Add a second **Android OAuth client ID** in Google Cloud Console using:
    - **Package name**: `com.studentnotes.app`
    - **SHA-1 certificate fingerprint**: The SHA-1 provided by EAS build credentials or your Google Play App Signing key.
-3. **EAS Build Environment Variables**:
-   - `eas.json` is pre-configured with the full `env` map across `development`, `preview`, and `production` profiles.
-   - `.easignore` preserves `.env` configurations during cloud bundling.
+3. **Environment Security & EAS Packaging**:
+   - Environment secrets are kept in `.env`, which is strictly `.gitignore`d and never exposed on GitHub.
+   - For EAS builds, `.easignore` ensures that your local `.env` is bundled securely into the cloud build without publishing secrets to Git.
+   - Alternatively, define them securely via EAS Secrets: `npx eas secret:create`.
 4. **Android Intent-Filter Callbacks**:
    `android/app/src/main/AndroidManifest.xml` registers both `studentnotes` and `com.studentnotes.app` schemes so browser redirects return smoothly to `MainActivity`.
 5. **Direct Code Exchange**:
@@ -80,30 +78,27 @@ When building a release APK via EAS (`npm run build:apk` or `eas build -p androi
 
 ---
 
-## 5. Environment Variables & Production Fallbacks
+## 5. Environment Variables Configuration (`.env`)
 
-Client IDs can be configured in your `.env` file:
+Configure your private `.env` file (strictly gitignored, never committed to GitHub):
 
 ```env
-# Firebase Secrets
-EXPO_PUBLIC_FIREBASE_API_KEY=AIzaSyAJfkbdk-TXyorPutYGTfIKoIYsBMRVzj8
-EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=studentnotes-6a97c.firebaseapp.com
-EXPO_PUBLIC_FIREBASE_PROJECT_ID=studentnotes-6a97c
-EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=studentnotes-6a97c.firebasestorage.app
-EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=985785236495
-EXPO_PUBLIC_FIREBASE_APP_ID=1:985785236495:web:249c32fcac96a792afb77a
-EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID=G-4T05VTNLBL
+# Firebase Configuration
+EXPO_PUBLIC_FIREBASE_API_KEY=your-firebase-api-key
+EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=your-firebase-project.firebaseapp.com
+EXPO_PUBLIC_FIREBASE_PROJECT_ID=your-firebase-project-id
+EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=your-firebase-project.firebasestorage.app
+EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your-messaging-sender-id
+EXPO_PUBLIC_FIREBASE_APP_ID=your-firebase-app-id
+EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID=your-measurement-id
 
 # Google OAuth 2.0 Client IDs
-EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=985785236495-gl6p4po49k7oqpksc0fe7jcasf1u8t01.apps.googleusercontent.com
-EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=985785236495-oln2vrjnsjtfsf7cojgob8vr49l3h02q.apps.googleusercontent.com
+EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=your-google-web-client-id.apps.googleusercontent.com
+EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=your-google-android-client-id.apps.googleusercontent.com
 ```
 
-### Production Fallback Layer
-To eliminate setup alerts on newly installed standalone APKs, fallback constants are embedded directly in code:
-- **`src/constants/authConfig.ts`**: Fallbacks to `DEFAULT_GOOGLE_WEB_CLIENT_ID` and `DEFAULT_GOOGLE_ANDROID_CLIENT_ID`.
-- **`src/services/firebase.ts`**: Fallbacks to verified project keys.
-- **`app.json`**: Client IDs mirrored in `expo.extra`.
+> [!SECURITY]
+> **Professional Security Rule**: Never commit real API keys, secrets, or Client IDs to public GitHub repositories. Keep them in your local `.env` file and use EAS Secrets or `.easignore` for build-time injection.
 
 ---
 
