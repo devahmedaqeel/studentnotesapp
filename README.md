@@ -4,7 +4,6 @@
   <img src="https://img.shields.io/badge/React_Native-0.81.5-61DAFB?style=for-the-badge&logo=react&logoColor=black" />
   <img src="https://img.shields.io/badge/Expo_SDK-54.0.0-000020?style=for-the-badge&logo=expo&logoColor=white" />
   <img src="https://img.shields.io/badge/SQLite-Local_First-003B57?style=for-the-badge&logo=sqlite&logoColor=white" />
-  <img src="https://img.shields.io/badge/Supabase-Cloud_Sync-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" />
   <img src="https://img.shields.io/badge/Firebase-Auth_&_Storage-FFCA28?style=for-the-badge&logo=firebase&logoColor=black" />
   <img src="https://img.shields.io/badge/EAS_Build-Android_APK-000020?style=for-the-badge&logo=expo&logoColor=white" />
   <img src="https://img.shields.io/badge/TypeScript-5.3-3178C6?style=for-the-badge&logo=typescript&logoColor=white" />
@@ -15,7 +14,7 @@
 
 ## 📖 Overview
 
-**StudentNotes** is an enterprise-grade, offline-first student productivity, document scanner, academic scheduling, and learning resource ecosystem. Built with **React Native (0.81.5)**, **Expo SDK 54**, **SQLite**, **Supabase**, and **Firebase**, it is designed to work seamlessly with zero internet connectivity while offering seamless multi-cloud synchronization, deadline alerts, class schedule management, and instant standalone APK generation.
+**StudentNotes** is an enterprise-grade, offline-first student productivity, document scanner, academic scheduling, and learning resource ecosystem. Built with **React Native (0.81.5)**, **Expo SDK 54**, **SQLite**, and **Firebase**, it is designed to work seamlessly with zero internet connectivity while offering cloud backup, deadline alerts, class schedule management, and instant standalone APK generation.
 
 ---
 
@@ -87,8 +86,8 @@
 
 ---
 
-### 🔐 10. Hybrid Auth & Multi-Account Isolation
-* **Hybrid Authentication**: Supports both **Firebase Auth** and **Supabase Auth** (Email/Password, Google OAuth).
+### 🔐 10. Offline-First Auth & Multi-Account Isolation
+* **Authentication**: Supports **Firebase Auth** (Email/Password, Google OAuth) and robust local account management.
 * **Guest / Offline Mode**: Instant offline access with local fallback profiles.
 * **Strict Multi-Account Isolation**: Local caches are purged upon logout to prevent cross-account data leaks. Logging in restores cloud data for that authenticated account.
 
@@ -118,7 +117,7 @@ StudentNotes App/
 │   │   ├── links/           # SavedLinksScreen, SaveLinkScreen
 │   │   ├── profile/         # ProfileSetup, EditProfile screens
 │   │   └── timetable/       # TimetableScreen, AddClassScreen
-│   ├── services/            # Business logic & APIs (Firebase, Supabase, PDF, Image, Sync)
+│   ├── services/            # Business logic & APIs (Firebase, PDF, Image, Sync)
 │   ├── theme/               # Color tokens, typography, and spacing constants
 │   └── types/               # TypeScript interface definitions
 ├── __tests__/               # Automated unit & integration tests (Jest)
@@ -180,10 +179,6 @@ npm start
 ### Environment Variables (`.env`)
 
 ```env
-# Supabase Configuration (Get from Supabase Dashboard -> Settings -> API)
-EXPO_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key-here
-
 # Firebase Configuration (Get from Firebase Console -> Project Settings)
 EXPO_PUBLIC_FIREBASE_API_KEY=your-firebase-api-key
 EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project-id.firebaseapp.com
@@ -221,7 +216,6 @@ npx expo-doctor
 | **Expo SDK 54** | Managed ecosystem & native APIs |
 | **TypeScript 5.3** | Static typing & enterprise reliability |
 | **Expo SQLite** | Offline-first local database storage |
-| **Supabase** | Cloud data synchronization & PostgreSQL RLS |
 | **Firebase** | Authentication & cloud storage backup |
 | **React Navigation v7** | Native Stack and Tab routing |
 | **EAS Build** | Cloud-based Android APK generation |

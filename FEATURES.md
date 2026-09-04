@@ -19,7 +19,7 @@
 | **Global Search** | Instant SQLite full-text search across subjects, folders, notes, PDFs, documents, saved links, and tags | ✅ 100% Complete |
 | **Trash Box & Recovery** | Safe soft-deletion with 1-tap full recovery of SQLite records and physical assets, plus permanent purge options | ✅ 100% Complete |
 | **Dynamic Themes** | Automatic system-synchronized Dark and Light mode support with manual override capability and premium HSL color tokens | ✅ 100% Complete |
-| **Hybrid Auth & Cloud Sync** | 100% local SQLite functionality with hybrid Firebase & Supabase Auth (Email & Google) and automatic background cloud synchronization | ✅ 100% Complete |
-| **Account Data Isolation** | Strict PostgreSQL Row-Level Security (`auth.uid() = user_id`), clean local SQLite cache purge on logout, and isolated multi-tenant data restoration | ✅ 100% Complete |
+| **Offline-First Auth & Cloud Sync** | 100% local SQLite functionality with Firebase Auth & Local Account store (Email & Google) and automatic background cloud synchronization | ✅ 100% Complete |
+| **Account Data Isolation** | Strict user-scoped isolation, clean local SQLite cache purge on logout, and multi-tenant data restoration | ✅ 100% Complete |
 | **Standalone APK (EAS Build)** | Cloud automated standalone Android APK build pipeline via Expo EAS (`eas.json` preview & production profiles) | ✅ 100% Complete |
 | **Quality & Testing** | Comprehensive automated Jest test suite covering all modules with 100% passing tests (9 test suites, 94 tests) | ✅ 100% Complete |

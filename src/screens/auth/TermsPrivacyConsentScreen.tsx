@@ -48,13 +48,7 @@ export const TermsPrivacyConsentScreen: React.FC<Props> = ({ navigation }) => {
     try {
       await acceptTerms();
 
-      if (session?.user) {
-        if (isProfileComplete) {
-          navigation.replace('MainTabs', { screen: 'Home' });
-        } else {
-          navigation.replace('ProfileSetup', { isEditing: false });
-        }
-      } else if (hasChosenMode) {
+      if (session?.user || hasChosenMode) {
         navigation.replace('MainTabs', { screen: 'Home' });
       } else {
         navigation.replace('Welcome');

@@ -164,10 +164,40 @@ jest.mock('firebase/auth', () => ({
   }),
   signInWithEmailAndPassword: jest.fn(() => Promise.resolve({ user: { uid: 'test-uid', email: 'test@example.com' } })),
   createUserWithEmailAndPassword: jest.fn(() => Promise.resolve({ user: { uid: 'test-uid', email: 'test@example.com' } })),
+  signInWithCredential: jest.fn(() => Promise.resolve({ user: { uid: 'google-uid-123', email: 'student.google@gmail.com', displayName: 'Google Student', photoURL: 'https://lh3.googleusercontent.com/avatar.jpg' } })),
+  signInWithPopup: jest.fn(() => Promise.resolve({ user: { uid: 'google-uid-123', email: 'student.google@gmail.com', displayName: 'Google Student', photoURL: 'https://lh3.googleusercontent.com/avatar.jpg' } })),
+  GoogleAuthProvider: Object.assign(
+    jest.fn().mockImplementation(() => ({
+      setCustomParameters: jest.fn(),
+    })),
+    {
+      credential: jest.fn((idToken) => ({ providerId: 'google.com', idToken })),
+    }
+  ),
   sendPasswordResetEmail: jest.fn(() => Promise.resolve()),
   signOut: jest.fn(() => Promise.resolve()),
   updatePassword: jest.fn(() => Promise.resolve()),
 }));
+
+jest.mock('react-native-svg', () => {
+  const React = require('react');
+  return {
+    __esModule: true,
+    default: (props) => React.createElement('Svg', props, props.children),
+    Svg: (props) => React.createElement('Svg', props, props.children),
+    Path: (props) => React.createElement('Path', props, props.children),
+    G: (props) => React.createElement('G', props, props.children),
+  };
+});
+
+jest.mock('expo-auth-session/providers/google', () => ({
+  useIdTokenAuthRequest: jest.fn(() => [
+    { isLoaded: true },
+    null,
+    jest.fn(() => Promise.resolve({ type: 'success', params: { id_token: 'mock-id-token' } })),
+  ]),
+}));
+
 
 jest.mock('firebase/firestore', () => ({
   getFirestore: jest.fn(() => ({})),

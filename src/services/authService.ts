@@ -5,6 +5,10 @@ import {
   signOut,
   updatePassword as updateFirebasePassword,
   User as FirebaseUser,
+  GoogleAuthProvider,
+  signInWithCredential,
+  signInWithPopup,
+  AuthCredential,
 } from 'firebase/auth';
 import { auth } from './firebase';
 import { AuthResponse, AppUser } from '../types/auth';
@@ -26,9 +30,18 @@ function formatFirebaseError(error: any): string {
     case 'auth/weak-password':
       return 'Password should be at least 6 characters.';
     case 'auth/network-request-failed':
-      return 'Network error. Please check your internet connection.';
+      return 'No internet connection. Please check your network and try again.';
     case 'auth/too-many-requests':
       return 'Too many failed attempts. Please try again later.';
+    case 'auth/account-exists-with-different-credential':
+      return 'An account already exists with this email using a different sign-in method. Please sign in with your email and password.';
+    case 'auth/popup-closed-by-user':
+    case 'auth/cancelled-popup-request':
+      return 'Google Sign-In was cancelled.';
+    case 'auth/popup-blocked':
+      return 'Sign-in popup was blocked by your browser. Please allow popups for this site.';
+    case 'auth/unauthorized-domain':
+      return 'This domain is not authorized for OAuth operations in your Firebase project.';
     default:
       return error?.message || 'An authentication error occurred.';
   }
@@ -111,6 +124,28 @@ export const authService = {
       }
       await updateFirebasePassword(auth.currentUser, password);
       return { success: true };
+    } catch (e: any) {
+      return { success: false, error: formatFirebaseError(e) };
+    }
+  },
+
+  async signInWithGoogleCredential(credential: AuthCredential): Promise<AuthResponse> {
+    try {
+      const userCredential = await signInWithCredential(auth, credential);
+      const appUser = wrapUser(userCredential.user);
+      return { success: true, user: appUser, session: { user: appUser } };
+    } catch (e: any) {
+      return { success: false, error: formatFirebaseError(e) };
+    }
+  },
+
+  async signInWithGooglePopup(): Promise<AuthResponse> {
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      const userCredential = await signInWithPopup(auth, provider);
+      const appUser = wrapUser(userCredential.user);
+      return { success: true, user: appUser, session: { user: appUser } };
     } catch (e: any) {
       return { success: false, error: formatFirebaseError(e) };
     }

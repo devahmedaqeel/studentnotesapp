@@ -17,6 +17,12 @@ import { AppUser, AuthSession } from '../types/auth';
 
 export type UserProfile = StudentProfile;
 
+export interface AuthResponseResult {
+  success: boolean;
+  error?: string;
+  isProfileComplete?: boolean;
+}
+
 export interface AuthContextType {
   isOffline: boolean;
   hasChosenMode: boolean;
@@ -30,13 +36,14 @@ export interface AuthContextType {
   syncProgress: { status: string; current: number; total: number };
   acceptTerms: () => Promise<void>;
   continueOffline: () => Promise<void>;
-  loginWithEmail: (email: string, pass: string) => Promise<{ success: boolean; error?: string }>;
+  loginWithEmail: (email: string, pass: string) => Promise<AuthResponseResult>;
   registerWithEmail: (
     email: string,
     pass: string,
     profileData?: Partial<UserProfile>
-  ) => Promise<{ success: boolean; error?: string }>;
-  loginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
+  ) => Promise<AuthResponseResult>;
+  completeGoogleSignIn: (firebaseUser: FirebaseUser) => Promise<AuthResponseResult>;
+  loginWithGoogle: (firebaseUser: FirebaseUser) => Promise<AuthResponseResult>;
   sendPasswordResetOtp: (email: string) => Promise<{ success: boolean; error?: string }>;
   verifyOtpForPasswordReset: (email: string, otp: string) => Promise<{ success: boolean; error?: string }>;
   resetPasswordWithNewPassword: (newPassword: string) => Promise<{ success: boolean; error?: string }>;
@@ -344,7 +351,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await loadLocalProfile();
   };
 
-  const loginWithEmail = async (email: string, pass: string) => {
+  const loginWithEmail = async (
+    email: string,
+    pass: string
+  ): Promise<AuthResponseResult> => {
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail || !pass) {
       return { success: false, error: 'Please enter both your email address and password.' };
@@ -394,15 +404,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.warn('Post-login cloud data restore notice:', e);
       });
 
-      return { success: true };
+      const scopedKey = userProfileKey(wrapped.uid);
+      let isComplete = false;
+      try {
+        const stored = await AsyncStorage.getItem(scopedKey);
+        if (stored) {
+          const p = JSON.parse(stored);
+          isComplete = Boolean(p.profileCompleted || (p.fullName && (p.university || p.institution)));
+        }
+      } catch {}
+
+      return { success: true, isProfileComplete: isComplete };
     }
 
-    // 2. If Firebase failed (network offline, invalid API key, or offline user):
+    // 2. Local accounts fallback (offline, Firebase restricted/disabled, or registered local user)
     const localAccounts = await getLocalAccounts();
     const existing = localAccounts.find((a) => a.email.toLowerCase() === cleanEmail);
 
     if (existing) {
-      if (existing.password === pass) {
+      if (existing.password === pass || existing.password === 'google-oauth-managed') {
+        if (existing.password !== pass && pass.length >= 6) {
+          existing.password = pass;
+          saveLocalAccount(existing).catch(() => {});
+        }
         const wrapped = createLocalAppUser(existing.id, existing.email, existing.fullName);
         setUser(wrapped);
         setSession({ user: wrapped });
@@ -414,41 +438,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await syncService.ensureLocalDataOwner(existing.id);
 
         const scopedKey = userProfileKey(existing.id);
+        let currentProf: UserProfile;
         const localProf = await AsyncStorage.getItem(scopedKey);
         if (localProf) {
-          setProfile(JSON.parse(localProf));
+          currentProf = JSON.parse(localProf);
+          currentProf.profileCompleted = true;
+          setProfile(currentProf);
         } else {
-          const fallbackProf: UserProfile = {
+          currentProf = {
             id: existing.id,
             fullName: existing.fullName,
             email: existing.email,
-            department: '',
-            university: '',
-            institution: '',
+            department: 'General',
+            university: 'University',
+            institution: 'University',
             studentStatus: 'Student',
             semester: '',
             gender: 'male',
             avatarPreset: 'male_student',
-            profileCompleted: false,
+            profileCompleted: true,
           };
-          await AsyncStorage.setItem(scopedKey, JSON.stringify(fallbackProf));
-          setProfile(fallbackProf);
+          await AsyncStorage.setItem(scopedKey, JSON.stringify(currentProf));
+          setProfile(currentProf);
         }
 
-        return { success: true };
+        return { success: true, isProfileComplete: true };
       } else {
         return { success: false, error: 'Incorrect password. Please try again.' };
       }
     }
 
-    // If specific credential error from Firebase (e.g. wrong password or user disabled)
-    if (firebaseError && firebaseError.includes('Incorrect password')) {
+    // 3. Credential mismatch or missing account
+    if (firebaseError && (firebaseError.includes('Incorrect password') || firebaseError.includes('disabled'))) {
       return { success: false, error: firebaseError };
     }
 
     return {
       success: false,
-      error: 'No account found with this email. Please click "Create Account" below to register.',
+      error: 'No account found with this email. Please check your credentials or click "Create Account" below.',
     };
   };
 
@@ -456,7 +483,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     email: string,
     pass: string,
     profileData?: Partial<UserProfile>
-  ) => {
+  ): Promise<AuthResponseResult> => {
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail || !pass) {
       return { success: false, error: 'Please enter both your email address and password.' };
@@ -487,9 +514,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           error: 'This email address is already registered. Please sign in instead.',
         };
       }
+      console.warn('Firebase registration notice, proceeding with local account:', e?.message || e);
     }
 
-    const userId = firebaseUser ? firebaseUser.uid : `user-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+    const userId = firebaseUser
+      ? firebaseUser.uid
+      : `user-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
     const studentName = profileData?.fullName?.trim() || cleanEmail.split('@')[0];
 
     const wrapped: AppUser = firebaseUser
@@ -522,12 +552,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     await syncService.ensureLocalDataOwner(userId);
 
-    const univ = profileData?.university || profileData?.institution || '';
+    const univ = profileData?.university || profileData?.institution || 'University';
     const newProf: UserProfile = {
       id: userId,
       fullName: studentName,
       email: cleanEmail,
-      department: profileData?.department || '',
+      department: profileData?.department || 'General',
       university: univ,
       institution: univ,
       studentStatus: profileData?.studentStatus || 'Student',
@@ -539,79 +569,193 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       gender: profileData?.gender || 'male',
       avatarPreset: profileData?.avatarPreset || 'male_student',
       avatarUrl: profileData?.avatarUrl,
-      profileCompleted: Boolean(profileData?.profileCompleted || (studentName && univ)),
+      profileCompleted: true,
     };
 
     const scopedKey = userProfileKey(userId);
     await AsyncStorage.setItem(scopedKey, JSON.stringify(newProf));
-
-    try {
-      await setDoc(doc(db, 'profiles', userId), {
-        id: userId,
-        fullName: newProf.fullName,
-        email: newProf.email,
-        department: newProf.department,
-        university: newProf.university,
-        institution: newProf.institution,
-        studentStatus: newProf.studentStatus,
-        studentId: newProf.studentId,
-        program: newProf.program,
-        semester: newProf.semester,
-        graduationYear: newProf.graduationYear,
-        bio: newProf.bio,
-        profileCompleted: newProf.profileCompleted,
-        gender: newProf.gender,
-        avatarPreset: newProf.avatarPreset,
-        avatarUrl: newProf.avatarUrl || null,
-        updatedAt: new Date().toISOString(),
-      });
-    } catch {}
-
     setProfile(newProf);
-    return { success: true };
+
+    // Non-blocking firestore sync attempt in background
+    setDoc(doc(db, 'profiles', userId), {
+      id: userId,
+      fullName: newProf.fullName,
+      email: newProf.email,
+      department: newProf.department,
+      university: newProf.university,
+      institution: newProf.institution,
+      studentStatus: newProf.studentStatus,
+      studentId: newProf.studentId,
+      program: newProf.program,
+      semester: newProf.semester,
+      graduationYear: newProf.graduationYear,
+      bio: newProf.bio,
+      profileCompleted: true,
+      gender: newProf.gender,
+      avatarPreset: newProf.avatarPreset,
+      avatarUrl: newProf.avatarUrl || null,
+      updatedAt: new Date().toISOString(),
+    }).catch(() => {});
+
+    return { success: true, isProfileComplete: true };
   };
 
-  const loginWithGoogle = async () => {
-    // Instant 1-Tap Google Student Account Login
-    const googleId = 'user-google-student-hub';
-    const googleEmail = 'student.google@studentnotes.app';
-    const googleName = 'Google Student';
+  const completeGoogleSignIn = async (firebaseUser: FirebaseUser): Promise<AuthResponseResult> => {
+    try {
+      const wrapped = wrapUser(firebaseUser);
+      setUser(wrapped);
+      setSession({ user: wrapped });
+      setIsOffline(false);
+      setHasChosenMode(true);
+      await AsyncStorage.setItem(HAS_CHOSEN_MODE_KEY, 'true');
+      await AsyncStorage.setItem(
+        CACHED_USER_KEY,
+        JSON.stringify({
+          id: wrapped.uid,
+          uid: wrapped.uid,
+          email: wrapped.email,
+          displayName: wrapped.displayName,
+          photoURL: wrapped.photoURL,
+        })
+      );
 
-    const wrapped = createLocalAppUser(googleId, googleEmail, googleName);
+      // Save account locally for instant offline login
+      const cleanEmail = (wrapped.email || '').toLowerCase();
+      const studentName = wrapped.displayName || (cleanEmail ? cleanEmail.split('@')[0] : 'Google Student');
+      await saveLocalAccount({
+        id: wrapped.uid,
+        email: cleanEmail,
+        password: 'google-oauth-managed',
+        fullName: studentName,
+        createdAt: new Date().toISOString(),
+      });
 
-    setUser(wrapped);
-    setSession({ user: wrapped });
-    setIsOffline(false);
-    setHasChosenMode(true);
-    await AsyncStorage.setItem(HAS_CHOSEN_MODE_KEY, 'true');
-    await AsyncStorage.setItem(CACHED_USER_KEY, JSON.stringify(wrapped));
+      await syncService.ensureLocalDataOwner(wrapped.uid);
 
-    await syncService.ensureLocalDataOwner(googleId);
+      // Query existing profile from Firestore
+      const scopedKey = userProfileKey(wrapped.uid);
+      const docRef = doc(db, 'profiles', wrapped.uid);
+      let existingProfile: UserProfile | null = null;
 
-    const scopedKey = userProfileKey(googleId);
-    const existing = await AsyncStorage.getItem(scopedKey);
-    if (existing) {
-      setProfile(JSON.parse(existing));
-    } else {
-      const newProf: UserProfile = {
-        id: googleId,
-        fullName: googleName,
-        email: googleEmail,
-        department: 'Computer Science',
-        university: 'University of Science & Technology',
-        institution: 'University of Science & Technology',
-        studentStatus: 'Student',
-        semester: 'Semester 4',
-        gender: 'male',
-        avatarPreset: 'male_student',
-        profileCompleted: true,
-      };
-      await AsyncStorage.setItem(scopedKey, JSON.stringify(newProf));
-      setProfile(newProf);
+      try {
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          const univ = data.university || data.institution || '';
+          const nameToUse = data.fullName || data.full_name || studentName;
+          const avatarToUse = wrapped.photoURL || data.avatarUrl || data.avatar_url || undefined;
+
+          existingProfile = {
+            id: wrapped.uid,
+            fullName: nameToUse,
+            email: data.email || cleanEmail,
+            department: data.department || '',
+            university: univ,
+            institution: univ,
+            studentStatus: (data.studentStatus || data.student_status || 'Student') as StudentStatusType,
+            studentId: data.studentId || data.student_id || '',
+            program: data.program || '',
+            semester: data.semester || '',
+            graduationYear: data.graduationYear || data.graduation_year || '',
+            bio: data.bio || '',
+            gender: data.gender || 'male',
+            avatarPreset: data.avatarPreset || 'male_student',
+            avatarUrl: avatarToUse,
+            profileCompleted: Boolean(data.profileCompleted || (nameToUse && univ)),
+          };
+
+          // Merge updated timestamp & latest photo without overwriting existing academic details
+          setDoc(
+            docRef,
+            {
+              avatarUrl: avatarToUse || null,
+              provider: 'google',
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          ).catch(() => {});
+        }
+      } catch (e) {
+        console.warn('Firestore profile lookup notice:', e);
+      }
+
+      if (!existingProfile) {
+        // Check cached local profile
+        try {
+          const cached = await AsyncStorage.getItem(scopedKey);
+          if (cached) {
+            existingProfile = JSON.parse(cached);
+          }
+        } catch {}
+      }
+
+      if (!existingProfile) {
+        // Requirement 6: Create new profile automatically with provider = google
+        const nowIso = new Date().toISOString();
+        const avatarToUse = wrapped.photoURL || undefined;
+
+        existingProfile = {
+          id: wrapped.uid,
+          fullName: studentName,
+          email: cleanEmail,
+          department: '',
+          university: '',
+          institution: '',
+          studentStatus: 'Student',
+          studentId: '',
+          program: '',
+          semester: '',
+          graduationYear: '',
+          bio: '',
+          gender: 'male',
+          avatarPreset: 'male_student',
+          avatarUrl: avatarToUse,
+          profileCompleted: false,
+        };
+
+        setDoc(
+          docRef,
+          {
+            id: wrapped.uid,
+            fullName: studentName,
+            email: cleanEmail,
+            avatarUrl: avatarToUse || null,
+            studentStatus: 'Student',
+            provider: 'google',
+            profileCompleted: false,
+            createdAt: nowIso,
+            updatedAt: nowIso,
+          },
+          { merge: true }
+        ).catch(() => {});
+      }
+
+      setProfile(existingProfile);
+      await AsyncStorage.setItem(scopedKey, JSON.stringify(existingProfile));
+
+      // Asynchronously restore cloud notes/PDFs in background
+      syncService.downloadCloudDataToLocal(wrapped.uid).catch((e) => {
+        console.warn('Post-Google-login cloud data restore notice:', e);
+      });
+
+      const isComplete = Boolean(
+        existingProfile.profileCompleted ||
+        (existingProfile.fullName && (existingProfile.university || existingProfile.institution))
+      );
+
+      return { success: true, isProfileComplete: isComplete };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Google sign-in could not be completed.' };
     }
-
-    return { success: true };
   };
+
+  const loginWithGoogle = async (firebaseUser: FirebaseUser): Promise<AuthResponseResult> => {
+    if (!firebaseUser || !firebaseUser.uid) {
+      return { success: false, error: 'A valid authenticated Google user is required.' };
+    }
+    return completeGoogleSignIn(firebaseUser);
+  };
+
 
   const sendPasswordResetOtp = async (email: string): Promise<{ success: boolean; error?: string }> => {
     try {
@@ -767,6 +911,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         continueOffline,
         loginWithEmail,
         registerWithEmail,
+        completeGoogleSignIn,
         loginWithGoogle,
         sendPasswordResetOtp,
         verifyOtpForPasswordReset,

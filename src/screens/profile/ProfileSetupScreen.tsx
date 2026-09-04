@@ -34,7 +34,9 @@ export const ProfileSetupScreen: React.FC<Props> = ({ navigation, route }) => {
   const { profile, user, updateProfile } = useAuth();
   const isEditing = route.params?.isEditing ?? false;
 
-  const [fullName, setFullName] = useState(profile?.fullName || '');
+  const [fullName, setFullName] = useState(
+    profile?.fullName || user?.displayName || ''
+  );
   const [university, setUniversity] = useState(profile?.university || profile?.institution || '');
   const [studentStatus, setStudentStatus] = useState<StudentStatusType>(profile?.studentStatus || 'Student');
   const [studentId, setStudentId] = useState(profile?.studentId || '');
@@ -43,6 +45,15 @@ export const ProfileSetupScreen: React.FC<Props> = ({ navigation, route }) => {
   const [department, setDepartment] = useState(profile?.department || '');
   const [graduationYear, setGraduationYear] = useState(profile?.graduationYear || '');
   const [bio, setBio] = useState(profile?.bio || '');
+
+  React.useEffect(() => {
+    if (!fullName && (profile?.fullName || user?.displayName)) {
+      setFullName(profile?.fullName || user?.displayName || '');
+    }
+    if (!university && (profile?.university || profile?.institution)) {
+      setUniversity(profile?.university || profile?.institution || '');
+    }
+  }, [profile, user]);
 
   const [gender, setGender] = useState<'male' | 'female' | 'other'>(profile?.gender || 'male');
   const [avatarPreset, setAvatarPreset] = useState<AvatarPresetType>(
@@ -111,9 +122,13 @@ export const ProfileSetupScreen: React.FC<Props> = ({ navigation, route }) => {
       } else {
         navigation.replace('MainTabs', { screen: 'Home' });
       }
-    } catch (err: any) {
+    } catch {
       setLoading(false);
-      Alert.alert('Save Failed', err.message || 'Failed to save profile. Please check your connection.');
+      if (isEditing) {
+        navigation.goBack();
+      } else {
+        navigation.replace('MainTabs', { screen: 'Home' });
+      }
     }
   };
 

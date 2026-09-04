@@ -1,6 +1,6 @@
 import 'react-native-gesture-handler';
 import React, { useEffect } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, LogBox } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -9,6 +9,12 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as WebBrowser from 'expo-web-browser';
 
 WebBrowser.maybeCompleteAuthSession();
+
+// Ignore Expo Go specific notification deprecation notice since local notifications are used
+LogBox.ignoreLogs([
+  'Android Push notifications (remote notifications) functionality provided by expo-notifications was removed from Expo Go',
+  'expo-notifications: Android Push notifications',
+]);
 
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
@@ -26,10 +32,7 @@ import { notificationService } from './src/services/notificationService';
 import { timetableNotificationService } from './src/services/timetableNotificationService';
 
 const linking = {
-  prefixes: [
-    'studentnotes://',
-    ...(process.env.EXPO_PUBLIC_SUPABASE_URL ? [process.env.EXPO_PUBLIC_SUPABASE_URL] : []),
-  ],
+  prefixes: ['studentnotes://'],
   config: {
     screens: {
       ResetPassword: 'reset-password',

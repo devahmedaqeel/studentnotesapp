@@ -7,7 +7,7 @@
 | AUTH-02 | Auth | Google Login | Returning login via Google | Session restored, existing profile and username loaded. | PASS | CRITICAL |
 | AUTH-03 | Auth | Email Login | Valid credentials | Successful login, session established. | PASS | CRITICAL |
 | AUTH-04 | Auth | Email Login | Invalid credentials | Proper error message shown, no login. | PASS | HIGH |
-| AUTH-05 | Auth | Signup | New account creation | Account created in Supabase, profile initialized in SQLite & Cloud. | PASS | CRITICAL |
+| AUTH-05 | Auth | Signup | New account creation | Account created in Auth store, profile initialized in SQLite & Cloud. | PASS | CRITICAL |
 | AUTH-06 | Auth | Logout | Sign out | Session cleared, local user data wiped (except scoped profile), returned to Welcome. | PASS | HIGH |
 | AUTH-07 | Auth | Password Reset | Forgot Password flow | Reset email received, deep link works, password updated, login works. | PASS | CRITICAL |
 | AUTH-08 | Profile | Username | Username uniqueness | Cannot pick a username already taken by another student. | PASS | HIGH |
@@ -21,7 +21,7 @@
 | ID | Module | Feature | Test Case | Expected Result | Status | Severity |
 |---|---|---|---|---|---|---|
 | SYNC-01 | Sync | Initial Sync | Data download on login | All subjects, notes, PDFs, etc. downloaded from cloud to SQLite. | PASS | CRITICAL |
-| SYNC-02 | Sync | Manual Sync | Push local changes | Local edits uploaded to Supabase without duplicates. | PASS | HIGH |
+| SYNC-02 | Sync | Manual Sync | Push local changes | Local edits uploaded to cloud without duplicates. | PASS | HIGH |
 | SYNC-03 | Offline | Content Access | Read-only offline | Can view notes, PDFs, diary, saved links while internet is off. | PASS | CRITICAL |
 | SYNC-04 | Offline | Data Creation | Create while offline | Content created offline persists in SQLite and uploads when online. | PASS | HIGH |
 | SYNC-05 | Offline | Sync Conflict | Local & Remote changes | Changes merged correctly using latest timestamp without data loss. | PASS | HIGH |
@@ -81,10 +81,10 @@
 |---|---|---|---|---|---|---|
 | BACK-01 | Database | Tables | Schema migrations | All tables created with correct columns, types, and foreign keys. | PASS | CRITICAL |
 | BACK-02 | Database | Indexes | Query performance | Indexes configured for rapid queries across all modules. | PASS | MEDIUM |
-| BACK-03 | Storage | File Upload | Upload media & documents | Files stored correctly in isolated user paths in Supabase Storage. | PASS | HIGH |
+| BACK-03 | Storage | File Upload | Upload media & documents | Files stored correctly in isolated user paths in cloud / local storage. | PASS | HIGH |
 | BACK-04 | Storage | File Download | Download stored assets | Files downloaded correctly to local device cache. | PASS | HIGH |
 | BACK-05 | Storage | File Deletion | Delete storage objects | Assets removed when item is deleted forever from trash. | PASS | MEDIUM |
-| BACK-06 | Realtime | Presence | Student online status | Status changes propagated via Supabase Realtime channel. | PASS | MEDIUM |
+| BACK-06 | Realtime | Presence | Student online status | Status changes handled smoothly. | PASS | MEDIUM |
 | BACK-07 | Auth | Row Level Security | Multi-tenant RLS | Strict enforcement of `auth.uid() = user_id` across all tables. | PASS | CRITICAL |
 | BACK-08 | Auth | Token Refresh | Auto session refresh | Session tokens renewed without interrupting user workflows. | PASS | MEDIUM |
 

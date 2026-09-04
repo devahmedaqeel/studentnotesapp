@@ -2,7 +2,7 @@
 
 ## 1. System Overview
 
-StudentNotes is an **offline-first**, production-ready student productivity, document management, and academic scheduling application built using **React Native (0.81.5)**, **Expo SDK 54**, **TypeScript**, **SQLite**, **Supabase Cloud**, and **Firebase**.
+StudentNotes is an **offline-first**, production-ready student productivity, document management, and academic scheduling application built using **React Native (0.81.5)**, **Expo SDK 54**, **TypeScript**, **SQLite**, and **Firebase**.
 
 ```
                            StudentNotes Application
@@ -10,10 +10,10 @@ StudentNotes is an **offline-first**, production-ready student productivity, doc
               ┌───────────────────────┴───────────────────────┐
               ▼                                               ▼
         OFFLINE MODE                                 AUTHENTICATED MODE
-      (Default / Guest)                        (Firebase Auth / Supabase Session)
+      (Default / Guest)                         (Firebase Auth / Local Session)
               │                                               │
      SQLite + Local Files                            SQLite + Cloud Sync
-   (No internet connection)                 (PostgreSQL RLS + Firebase Firestore)
+   (No internet connection)                       (Local DB + Firebase Firestore)
               │                                               │
               └───────────────────────┬───────────────────────┘
                                       ▼
@@ -42,7 +42,7 @@ The application adheres strictly to a clean 5-layer separation of concerns patte
 * `useAuth`, `useTheme`, `useSubjects`, `useNotes`, `usePdfs`, `useDocuments`, `useDiary`, `useTimetable`, `useConnect`.
 
 ### 3. Services Layer
-* `authService`: Manages hybrid Firebase & Supabase authentication, session persistence, and guest modes.
+* `authService`: Manages Firebase and local authentication, session persistence, and guest modes.
 * `localAccountService`: Isolated offline credential management and token caching.
 * `syncService`: Bidirectional synchronization between SQLite and remote cloud backends.
 * `linkService`: Smart URL cleaning, tracker removal, and automatic metadata scraping.
@@ -56,7 +56,7 @@ The application adheres strictly to a clean 5-layer separation of concerns patte
 ### 5. Data & Storage Layer
 * **Local SQLite**: `student_notes.db` executed through `expo-sqlite`.
 * **Device Storage**: Sandboxed file system via `expo-file-system`.
-* **Cloud Persistence**: Supabase PostgreSQL with strict Row-Level Security (`auth.uid() = user_id`) and Firebase Firestore / Storage.
+* **Cloud Persistence**: Firebase Firestore / Storage with local SQLite backing.
 
 ---
 

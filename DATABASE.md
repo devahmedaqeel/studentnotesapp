@@ -1,6 +1,6 @@
 # StudentNotes - Database Architecture & Schema
 
-StudentNotes utilizes **SQLite 3** via `expo-sqlite` for fast, offline-first local data storage, combined with **Supabase PostgreSQL** for cloud backup and synchronization.
+StudentNotes utilizes **SQLite 3** via `expo-sqlite` for fast, offline-first local data storage, combined with Firebase Firestore for cloud backup and synchronization.
 
 ---
 

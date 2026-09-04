@@ -12,17 +12,20 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
 import { useTheme } from '../../hooks/useTheme';
 import { useAuth } from '../../hooks/useAuth';
+import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 import { useNetwork } from '../../context/NetworkContext';
 import { AppHeader } from '../../components/common/AppHeader';
 import { AppInput } from '../../components/common/AppInput';
 import { AppButton } from '../../components/common/AppButton';
+import { GoogleSignInButton } from '../../components/common/GoogleSignInButton';
 import { Ionicons } from '@expo/vector-icons';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Register'>;
 
 export const RegisterScreen: React.FC<Props> = ({ navigation }) => {
-  const { theme, isDark } = useTheme();
-  const { registerWithEmail, loginWithGoogle, isProfileComplete } = useAuth();
+  const { theme } = useTheme();
+  const { registerWithEmail } = useAuth();
+  const { signInWithGoogle, loading: googleLoading, error: googleError } = useGoogleAuth();
   const { checkConnection } = useNetwork();
 
   const [fullName, setFullName] = useState('');
@@ -33,16 +36,12 @@ export const RegisterScreen: React.FC<Props> = ({ navigation }) => {
   const [showConfirmPass, setShowConfirmPass] = useState(false);
 
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const activeError = errorMsg || googleError;
 
   const handleRegister = async () => {
     setErrorMsg(null);
-    const online = await checkConnection();
-    if (!online) {
-      setErrorMsg('Internet connection required. Please connect to create your account.');
-      return;
-    }
 
     if (!fullName.trim()) {
       setErrorMsg('Please enter your full name.');
@@ -77,32 +76,21 @@ export const RegisterScreen: React.FC<Props> = ({ navigation }) => {
         return;
       }
 
-      // Successfully registered — proceed to ProfileSetup
-      navigation.replace('ProfileSetup', { isEditing: false });
+      // Successfully registered — proceed to Home directly!
+      navigation.replace('MainTabs', { screen: 'Home' });
     } catch (e: any) {
       setLoading(false);
       setErrorMsg(e.message || 'An unexpected error occurred during signup.');
     }
   };
 
-  const handleGoogleSignup = async () => {
+  const handleGoogleSignIn = async () => {
     setErrorMsg(null);
-    setGoogleLoading(true);
-    try {
-      const res = await loginWithGoogle();
-      setGoogleLoading(false);
-      if (res.success) {
-        if (isProfileComplete) {
-          navigation.replace('MainTabs', { screen: 'Home' });
-        } else {
-          navigation.replace('ProfileSetup', { isEditing: false });
-        }
-      } else if (res.error && !res.error.toLowerCase().includes('cancel')) {
-        setErrorMsg(res.error);
-      }
-    } catch (e: any) {
-      setGoogleLoading(false);
-      setErrorMsg(e.message || 'Google sign-up failed.');
+    const res = await signInWithGoogle();
+    if (res.success) {
+      navigation.replace('MainTabs', { screen: 'Home' });
+    } else if (res.error && !res.error.toLowerCase().includes('cancel')) {
+      setErrorMsg(res.error);
     }
   };
 
@@ -130,10 +118,32 @@ export const RegisterScreen: React.FC<Props> = ({ navigation }) => {
         </View>
 
         {/* Error Alert Box */}
-        {errorMsg ? (
+        {activeError ? (
           <View style={[styles.errorBox, { backgroundColor: theme.colors.dangerLight, borderColor: theme.colors.danger }]}>
-            <Ionicons name="alert-circle" size={20} color={theme.colors.danger} style={{ marginRight: 8 }} />
-            <Text style={[styles.errorText, { color: theme.colors.danger }]}>{errorMsg}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons name="alert-circle" size={20} color={theme.colors.danger} style={{ marginRight: 8 }} />
+              <Text style={[styles.errorText, { color: theme.colors.danger, flex: 1 }]}>{activeError}</Text>
+              <TouchableOpacity onPress={() => setErrorMsg(null)} style={{ padding: 4, marginLeft: 6 }}>
+                <Ionicons name="close" size={18} color={theme.colors.danger} />
+              </TouchableOpacity>
+            </View>
+            {activeError.toLowerCase().includes('already registered') && (
+              <TouchableOpacity
+                onPress={() => navigation.navigate('Login')}
+                style={{
+                  marginTop: 10,
+                  backgroundColor: theme.colors.primary,
+                  paddingVertical: 8,
+                  paddingHorizontal: 14,
+                  borderRadius: 8,
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 13 }}>
+                  Sign In to this Account →
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         ) : null}
 
@@ -141,7 +151,10 @@ export const RegisterScreen: React.FC<Props> = ({ navigation }) => {
         <AppInput
           label="Full Name *"
           value={fullName}
-          onChangeText={setFullName}
+          onChangeText={(v) => {
+            setFullName(v);
+            if (errorMsg) setErrorMsg(null);
+          }}
           placeholder="e.g. Ahmed Khan"
           autoCapitalize="words"
           leftIcon="person-outline"
@@ -150,7 +163,10 @@ export const RegisterScreen: React.FC<Props> = ({ navigation }) => {
         <AppInput
           label="Email Address *"
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(v) => {
+            setEmail(v);
+            if (errorMsg) setErrorMsg(null);
+          }}
           placeholder="e.g. student@university.edu"
           keyboardType="email-address"
           autoCapitalize="none"
@@ -160,7 +176,10 @@ export const RegisterScreen: React.FC<Props> = ({ navigation }) => {
         <AppInput
           label="Password (min 6 characters) *"
           value={password}
-          onChangeText={setPassword}
+          onChangeText={(v) => {
+            setPassword(v);
+            if (errorMsg) setErrorMsg(null);
+          }}
           placeholder="••••••••"
           secureTextEntry={!showPassword}
           leftIcon="lock-closed-outline"
@@ -171,7 +190,10 @@ export const RegisterScreen: React.FC<Props> = ({ navigation }) => {
         <AppInput
           label="Confirm Password *"
           value={confirmPass}
-          onChangeText={setConfirmPass}
+          onChangeText={(v) => {
+            setConfirmPass(v);
+            if (errorMsg) setErrorMsg(null);
+          }}
           placeholder="••••••••"
           secureTextEntry={!showConfirmPass}
           leftIcon="lock-closed-outline"
@@ -183,6 +205,7 @@ export const RegisterScreen: React.FC<Props> = ({ navigation }) => {
           title="Create Account"
           onPress={handleRegister}
           loading={loading}
+          disabled={googleLoading}
           size="large"
           style={{ marginTop: 12 }}
         />
@@ -195,17 +218,12 @@ export const RegisterScreen: React.FC<Props> = ({ navigation }) => {
         </View>
 
         {/* Google Sign Up Button */}
-        <TouchableOpacity
-          activeOpacity={0.85}
-          style={[styles.googleBtn, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
-          onPress={handleGoogleSignup}
-          disabled={googleLoading}
-        >
-          <Ionicons name="logo-google" size={20} color="#EA4335" style={{ marginRight: 10 }} />
-          <Text style={[styles.googleBtnText, { color: theme.colors.text }]}>
-            {googleLoading ? 'Connecting to Google...' : 'Continue with Google'}
-          </Text>
-        </TouchableOpacity>
+        <GoogleSignInButton
+          onPress={handleGoogleSignIn}
+          loading={googleLoading}
+          disabled={loading}
+          style={{ marginVertical: 4 }}
+        />
 
         {/* Switch to Login */}
         <View style={styles.footerRow}>
@@ -228,8 +246,6 @@ const styles = StyleSheet.create({
   scrollContent: { padding: 20, paddingBottom: 160 },
   headerBox: { marginBottom: 20 },
   errorBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
     padding: 12,
     borderRadius: 10,
     borderWidth: 1,

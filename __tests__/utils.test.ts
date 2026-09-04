@@ -155,7 +155,7 @@ describe('Utility Functions Unit Tests', () => {
       expect(base64ToUint8Array(b64Single)[0]).toBe(65);
     });
 
-    test('creates valid ArrayBuffer from base64 for Supabase Storage uploads', () => {
+    test('creates valid ArrayBuffer from base64 for document and binary uploads', () => {
       const testB64 = btoa('Test PDF Binary Payload');
       const arrayBuffer = base64ToArrayBuffer(testB64);
       expect(arrayBuffer.byteLength).toBe(23);

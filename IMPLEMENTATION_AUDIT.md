@@ -49,14 +49,14 @@ Physical assets are saved on the local device file system (`fileService.ts`):
 
 - `AuthContext.tsx` handles `OFFLINE_MODE` and `AUTHENTICATED_MODE`.
 - Supports `Continue Offline` (persisted in AsyncStorage as `studentnotes_has_chosen_mode`).
-- Supabase Auth integration supports Email/Password login, registration, password resets, and Google OAuth via `expo-web-browser` and `expo-auth-session`.
+- Authentication supports Email/Password login, registration, password resets, and Google sign-in.
 
 ---
 
-## 6. Existing Supabase Integration
+## 6. Cloud Sync Integration
 
-- `src/services/supabase.ts` initializes Supabase client with `@react-native-async-storage/async-storage`.
-- `SUPABASE_SCHEMA.sql` defines tables (`profiles`, `subjects`, `folders`, `notes`, `note_pages`, `pdfs`, `tags`, `note_tags`), RLS policies (`auth.uid() = user_id`), and storage buckets (`note-files`, `pdf-files`, `avatars`).
+- Firebase Firestore & Storage handle cloud backup and synchronization.
+- Local SQLite database provides 100% offline persistence.
 
 ---
 
@@ -78,11 +78,11 @@ The following operations operate 100% offline without network connectivity or ma
 ## 8. Missing Functionality & Refinements
 
 - **Phase 4**: `.env.example` file and `.gitignore` entries for secret protection.
-- **Phase 5**: Service layer wrappers (`src/services/authService.ts`, `profileService.ts`, `subjectService.ts`, `folderService.ts`, `noteService.ts`, `pdfService.ts`, `storageService.ts`) to enforce strict layer architecture (`Screen -> Hook -> Service -> Repository -> SQLite/Supabase`).
-- **Phase 6 - 16**: SQL migration file (`supabase/migrations/001_initial_schema.sql`) and `src/types/` definitions (`auth.ts`, `profile.ts`, `sync.ts`).
+- **Phase 5**: Service layer wrappers (`src/services/authService.ts`, `profileService.ts`, `subjectService.ts`, `folderService.ts`, `noteService.ts`, `pdfService.ts`, `storageService.ts`) to enforce strict layer architecture (`Screen -> Hook -> Service -> Repository -> SQLite / Cloud`).
+- **Phase 6 - 16**: Cloud migration and `src/types/` definitions (`auth.ts`, `profile.ts`, `sync.ts`).
 - **Phase 22**: Deep linking `scheme: "studentnotes"` in `app.json` for OAuth redirect.
 - **Phase 32**: Automatic network detection (`@react-native-community/netinfo` or Expo `Network`) triggering background sync when transitioning from offline to online.
-- **Phase 51**: Complete documentation files: `README.md`, `ARCHITECTURE.md`, `SUPABASE_SETUP.md`.
+- **Phase 51**: Complete documentation files: `README.md`, `ARCHITECTURE.md`.
 
 ---
 
@@ -90,19 +90,17 @@ The following operations operate 100% offline without network connectivity or ma
 
 ### New Files to Create:
 1. `.env.example`
-2. `supabase/migrations/001_initial_schema.sql`
-3. `src/types/auth.ts`
-4. `src/types/profile.ts`
-5. `src/types/sync.ts`
-6. `src/services/authService.ts`
-7. `src/services/profileService.ts`
-8. `src/services/subjectService.ts`
-9. `src/services/folderService.ts`
-10. `src/services/noteService.ts`
-11. `src/services/pdfService.ts`
-12. `src/services/storageService.ts`
-13. `src/screens/profile/EditProfileScreen.tsx`
-14. `SUPABASE_SETUP.md`
+2. `src/types/auth.ts`
+3. `src/types/profile.ts`
+4. `src/types/sync.ts`
+5. `src/services/authService.ts`
+6. `src/services/profileService.ts`
+7. `src/services/subjectService.ts`
+8. `src/services/folderService.ts`
+9. `src/services/noteService.ts`
+10. `src/services/pdfService.ts`
+11. `src/services/storageService.ts`
+12. `src/screens/profile/EditProfileScreen.tsx`
 
 ### Files to Update / Refine:
 1. `app.json` (add scheme for OAuth)
@@ -122,6 +120,6 @@ The following operations operate 100% offline without network connectivity or ma
 1. **Asset Type Alignment**: Converted `assets/icon.png`, `assets/adaptive-icon.png`, and `assets/splash.png` from JPEG to standard PNG format, passing Expo CLI schema validations.
 2. **Dependency Harmonization**: Removed extraneous `@types/react-native` package to resolve typing conflicts with React Native 0.81.5; aligned patch dependencies (`expo@~54.0.37`, `expo-constants@~18.0.14`, `expo-file-system@~19.0.24`, `jest-expo@~54.0.18`).
 3. **Android Prebuild Synchronization**: Generated clean Android native files with `npx expo prebuild`, automatically injecting notification, storage, and alarm permissions into `AndroidManifest.xml`.
-4. **Cloud Build Secrets**: Exported both Supabase and Firebase configuration variables into `eas.json` for seamless `preview` and `production` APK cloud builds.
+4. **Cloud Build Secrets**: Exported Firebase configuration variables into `eas.json` for seamless `preview` and `production` APK cloud builds.
 5. **Quality Assurance**: Verified 0 TypeScript errors with `tsc --noEmit`, successful JS Hermes bundling with `expo export`, and 100% test pass rate across all 9 Jest test suites.
 

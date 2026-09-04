@@ -4,23 +4,27 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
 import { useTheme } from '../../hooks/useTheme';
 import { useAuth } from '../../hooks/useAuth';
+import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 import { AppHeader } from '../../components/common/AppHeader';
 import { AppInput } from '../../components/common/AppInput';
 import { AppButton } from '../../components/common/AppButton';
+import { GoogleSignInButton } from '../../components/common/GoogleSignInButton';
 import { Ionicons } from '@expo/vector-icons';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 export const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const { theme } = useTheme();
-  const { loginWithEmail, loginWithGoogle, isProfileComplete } = useAuth();
+  const { loginWithEmail, registerWithEmail } = useAuth();
+  const { signInWithGoogle, loading: googleLoading, error: googleError } = useGoogleAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const activeError = errorMsg || googleError;
 
   const handleLogin = async () => {
     if (!email.trim() || !password) {
@@ -34,36 +38,50 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
     setLoading(false);
 
     if (result.success) {
-      if (isProfileComplete) {
-        navigation.replace('MainTabs', { screen: 'Home' });
-      } else {
-        navigation.replace('ProfileSetup', { isEditing: false });
-      }
+      navigation.replace('MainTabs', { screen: 'Home' });
     } else {
       setErrorMsg(result.error || 'Failed to sign in. Please verify your credentials.');
     }
   };
 
-  const handleGoogleLogin = async () => {
+  const handleQuickRegisterAndLogin = async () => {
+    if (!email.trim() || !password) {
+      setErrorMsg('Please enter both your email address and password.');
+      return;
+    }
+    if (password.length < 6) {
+      setErrorMsg('Password must be at least 6 characters long.');
+      return;
+    }
     setErrorMsg(null);
-    setGoogleLoading(true);
-    try {
-      const result = await loginWithGoogle();
-      if (result.success) {
-        if (isProfileComplete) {
-          navigation.replace('MainTabs', { screen: 'Home' });
-        } else {
-          navigation.replace('ProfileSetup', { isEditing: false });
-        }
-      } else if (result.error && !result.error.toLowerCase().includes('cancel')) {
-        setErrorMsg(result.error);
-      }
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Google sign-in could not be completed. Please try again.');
-    } finally {
-      setGoogleLoading(false);
+    setLoading(true);
+    const result = await registerWithEmail(email.trim(), password, {
+      fullName: email.split('@')[0],
+      university: 'University',
+    });
+    setLoading(false);
+    if (result.success) {
+      navigation.replace('MainTabs', { screen: 'Home' });
+    } else {
+      setErrorMsg(result.error || 'Account creation failed. Please check your details.');
     }
   };
+
+  const handleGoogleSignIn = async () => {
+    setErrorMsg(null);
+    const result = await signInWithGoogle();
+    if (result.success) {
+      navigation.replace('MainTabs', { screen: 'Home' });
+    } else if (result.error && !result.error.toLowerCase().includes('cancel')) {
+      setErrorMsg(result.error);
+    }
+  };
+
+  const isNoAccountError =
+    Boolean(activeError) &&
+    (activeError!.toLowerCase().includes('no account') ||
+      activeError!.toLowerCase().includes('create account') ||
+      activeError!.toLowerCase().includes('not found'));
 
   return (
     <KeyboardAvoidingView
@@ -99,17 +117,36 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
           Sign in to access and sync your study notes, subjects, and PDFs.
         </Text>
 
-        {errorMsg && (
+        {activeError && (
           <View style={[styles.errorBox, { backgroundColor: theme.colors.dangerLight }]}>
-            <Ionicons name="alert-circle-outline" size={18} color={theme.colors.danger} style={{ marginRight: 6 }} />
-            <Text style={[theme.typography.body2, { color: theme.colors.danger, flex: 1 }]}>{errorMsg}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons name="alert-circle-outline" size={18} color={theme.colors.danger} style={{ marginRight: 6 }} />
+              <Text style={[theme.typography.body2, { color: theme.colors.danger, flex: 1 }]}>{activeError}</Text>
+              <TouchableOpacity onPress={() => setErrorMsg(null)} style={{ padding: 4, marginLeft: 4 }}>
+                <Ionicons name="close" size={18} color={theme.colors.danger} />
+              </TouchableOpacity>
+            </View>
+            {isNoAccountError && (
+              <TouchableOpacity
+                onPress={handleQuickRegisterAndLogin}
+                style={[styles.quickCreateBtn, { backgroundColor: theme.colors.primary }]}
+              >
+                <Ionicons name="sparkles" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 13 }}>
+                  Create Account with this Email & Sign In
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
         <AppInput
           label="Email Address"
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(v) => {
+            setEmail(v);
+            if (errorMsg) setErrorMsg(null);
+          }}
           placeholder="student@university.edu"
           keyboardType="email-address"
           autoCapitalize="none"
@@ -119,7 +156,10 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
         <AppInput
           label="Password"
           value={password}
-          onChangeText={setPassword}
+          onChangeText={(v) => {
+            setPassword(v);
+            if (errorMsg) setErrorMsg(null);
+          }}
           placeholder="••••••••"
           secureTextEntry={!showPassword}
           leftIcon="lock-closed-outline"
@@ -153,14 +193,10 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
           <View style={[styles.divider, { backgroundColor: theme.colors.borderLight }]} />
         </View>
 
-        <AppButton
-          title="Continue with Google"
-          onPress={handleGoogleLogin}
+        <GoogleSignInButton
+          onPress={handleGoogleSignIn}
           loading={googleLoading}
           disabled={loading}
-          variant="outline"
-          icon="logo-google"
-          size="large"
           style={{ marginTop: 16, marginBottom: 24 }}
         />
 
@@ -196,11 +232,18 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   errorBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
     padding: 12,
     borderRadius: 10,
     marginBottom: 16,
+  },
+  quickCreateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    marginTop: 10,
   },
   dividerRow: {
     flexDirection: 'row',

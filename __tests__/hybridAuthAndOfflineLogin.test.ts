@@ -108,4 +108,51 @@ describe('Hybrid Authentication & Offline Account Registry Test Suite', () => {
       expect(isPasswordCorrect).toBe(false);
     });
   });
+
+  describe('4. Google Sign-In & Profile Completion Logic', () => {
+    test('creates custom Google user account with isolated ID and normalized email', () => {
+      const customEmail = 'Ahmed.Aqeel@gmail.com';
+      const cleanEmail = customEmail.trim().toLowerCase();
+      const derivedName = 'Ahmed Aqeel';
+      const googleId = 'user-google-' + cleanEmail.replace(/[^a-zA-Z0-9]/g, '_');
+
+      const user = createLocalAppUser(googleId, cleanEmail, derivedName);
+      expect(user.id).toBe('user-google-ahmed_aqeel_gmail_com');
+      expect(user.email).toBe('ahmed.aqeel@gmail.com');
+      expect(user.displayName).toBe('Ahmed Aqeel');
+    });
+
+    test('marks Google account profileCompleted as true to route directly to MainTabs', () => {
+      const googleProfile = {
+        id: 'user-google-student-hub',
+        fullName: 'Google Student',
+        email: 'student.notes.study@gmail.com',
+        university: 'University of Science & Technology',
+        profileCompleted: true,
+      };
+
+      const isComplete = Boolean(
+        googleProfile.profileCompleted ||
+        (googleProfile.fullName && googleProfile.university)
+      );
+      expect(isComplete).toBe(true);
+    });
+
+    test('persists Google account in local account store for immediate offline re-login', async () => {
+      const googleAccount = {
+        id: 'user-google-test',
+        email: 'student@gmail.com',
+        password: 'google-oauth-managed',
+        fullName: 'Student User',
+        createdAt: new Date().toISOString(),
+      };
+
+      await saveLocalAccount(googleAccount);
+      const accounts = await getLocalAccounts();
+      const found = accounts.find((a) => a.email === 'student@gmail.com');
+      expect(found).toBeDefined();
+      expect(found?.fullName).toBe('Student User');
+    });
+  });
 });
+

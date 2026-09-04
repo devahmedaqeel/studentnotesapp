@@ -61,10 +61,7 @@ export const RootNavigator: React.FC = () => {
     if (pendingPasswordReset) {
       return 'ResetPassword';
     }
-    if (session?.user) {
-      return isProfileComplete ? 'MainTabs' : 'ProfileSetup';
-    }
-    if (hasChosenMode) {
+    if (session?.user || hasChosenMode) {
       return 'MainTabs';
     }
     return 'Welcome';
